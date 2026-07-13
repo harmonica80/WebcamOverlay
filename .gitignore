@@ -1,0 +1,8 @@
+node_modules/
+.npm-cache/
+.electron-cache/
+.builder-cache/
+release/*
+!release/WebcamOverlay-Portable-0.2.7.exe
+Data/
+*.log

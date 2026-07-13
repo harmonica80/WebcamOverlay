@@ -1,0 +1,40 @@
+{
+  "name": "webcam-overlay",
+  "version": "0.2.7",
+  "description": "Portable dual webcam overlay for Windows",
+  "main": "src/main.js",
+  "author": "Webcam Overlay",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "build:portable": "node scripts/generate-icons.js && electron-builder --win portable --x64"
+  },
+  "devDependencies": {
+    "electron": "^37.2.0",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "tw.local.webcamoverlay",
+    "productName": "WebcamOverlay",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "src/**/*",
+      "scripts/generate-icons.js",
+      "package.json"
+    ],
+    "win": {
+      "icon": "src/assets/app-icon.png",
+      "target": [
+        "portable"
+      ]
+    },
+    "portable": {
+      "artifactName": "WebcamOverlay-Portable-${version}.exe"
+    }
+  },
+  "dependencies": {
+    "@mediapipe/selfie_segmentation": "^0.1.1675465747"
+  }
+}
