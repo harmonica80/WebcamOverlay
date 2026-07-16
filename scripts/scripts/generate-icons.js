@@ -1,0 +1,7 @@
+const fs = require('fs');
+const path = require('path');
+const zlib = require('zlib');
+function crc32(buffer){let crc=0xffffffff;for(const byte of buffer){crc^=byte;for(let i=0;i<8;i++)crc=(crc>>>1)^(0xedb88320&-(crc&1));}return(crc^0xffffffff)>>>0;}
+function chunk(type,data){const name=Buffer.from(type),out=Buffer.alloc(data.length+12);out.writeUInt32BE(data.length,0);name.copy(out,4);data.copy(out,8);out.writeUInt32BE(crc32(Buffer.concat([name,data])),data.length+8);return out;}
+function makePng(size){const raw=Buffer.alloc((size*4+1)*size);for(let y=0;y<size;y++){const row=y*(size*4+1);for(let x=0;x<size;x++){const p=row+1+x*4,r=size*.1,inside=x>=r&&y>=r&&x<size-r&&y<size-r,camera=x>size*.22&&x<size*.64&&y>size*.32&&y<size*.68,cone=x>=size*.62&&x<size*.82&&Math.abs(y-size*.5)<(x-size*.59)*.55,lens=(x-size*.43)**2+(y-size*.5)**2<(size*.13)**2,white=camera||cone;raw[p]=lens?36:white?255:inside?36:0;raw[p+1]=lens?99:white?255:inside?99:0;raw[p+2]=lens?220:white?255:inside?220:0;raw[p+3]=inside?255:0;}}const ihdr=Buffer.alloc(13);ihdr.writeUInt32BE(size,0);ihdr.writeUInt32BE(size,4);ihdr[8]=8;ihdr[9]=6;return Buffer.concat([Buffer.from([137,80,78,71,13,10,26,10]),chunk('IHDR',ihdr),chunk('IDAT',zlib.deflateSync(raw)),chunk('IEND',Buffer.alloc(0))]);}
+const out=path.join(__dirname,'..','src','assets');fs.mkdirSync(out,{recursive:true});fs.writeFileSync(path.join(out,'tray-icon.png'),makePng(32));fs.writeFileSync(path.join(out,'app-icon.png'),makePng(256));
