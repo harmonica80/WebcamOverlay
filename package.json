@@ -1,6 +1,6 @@
 {
   "name": "webcam-overlay",
-  "version": "0.2.8",
+  "version": "0.2.9",
   "description": "Portable dual webcam overlay for Windows",
   "main": "src/main.js",
   "author": "Webcam Overlay",

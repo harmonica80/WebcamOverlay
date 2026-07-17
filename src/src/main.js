@@ -249,7 +249,10 @@ ipcMain.handle('save-hotkeys', (_e, hotkeys) => {
 });
 ipcMain.on('overlay-click', (_e, index) => {
   if (displayMode === 1) activeSingleSource = 1 - activeSingleSource;
-  else if (displayMode === 2) return;
+  else if (displayMode === 2) {
+    [config.sources[0], config.sources[1]] = [config.sources[1], config.sources[0]];
+    [config.sourceNames[0], config.sourceNames[1]] = [config.sourceNames[1], config.sourceNames[0]];
+  }
   refreshOverlays();
 });
 ipcMain.on('drag-start', (_e, { index, screenX, screenY }) => {
