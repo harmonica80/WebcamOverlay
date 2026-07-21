@@ -13,6 +13,13 @@ const overlaySizes = new Map();
 const resizeAnimations = new Map();
 let saveTimer;
 
+// 16:9 視窗固定使用 32 像素級距，確保寬高皆為偶數，降低 Windows
+// 桌面合成器與螢幕錄影器在縮放透明視窗時產生的次像素抖動。
+function stableOverlaySize(rawWidth, circle = false) {
+  const width = Math.max(192, Math.min(1088, Math.round((Number(rawWidth) || 420) / 32) * 32));
+  return { width, height: circle ? width : width * 9 / 16 };
+}
+
 const defaults = {
   schemaVersion: 1,
   sources: ['', ''],
@@ -68,8 +75,7 @@ function scheduleSave() {
 
 function createOverlay(index) {
   const saved = config.overlayBounds[index] || defaults.overlayBounds[index];
-  const normalizedWidth = Math.max(180, Math.min(1100, Number(saved.width) || 420));
-  const normalizedHeight = config.appearance.shape === 'circle' ? normalizedWidth : Math.round(normalizedWidth * 9 / 16);
+  const { width: normalizedWidth, height: normalizedHeight } = stableOverlaySize(saved.width, config.appearance.shape === 'circle');
   overlaySizes.set(index, { width: normalizedWidth, height: normalizedHeight });
   const area = screen.getPrimaryDisplay().workArea;
   const fallbackX = area.x + area.width - normalizedWidth - 28;
@@ -81,7 +87,11 @@ function createOverlay(index) {
     minWidth: 180, minHeight: 101,
     frame: false, transparent: true, backgroundColor: '#00000000',
     alwaysOnTop: true, skipTaskbar: true, show: false,
-    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true }
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      backgroundThrottling: false
+    }
   });
   win.setResizable(false);
   win.setAlwaysOnTop(true, 'screen-saver');
@@ -193,8 +203,7 @@ function applyShapeGeometry() {
   overlays.forEach((win, index) => {
     if (!win || win.isDestroyed()) return;
     const b = win.getBounds();
-    const width = b.width;
-    const height = circle ? width : Math.round(width * 9 / 16);
+    const { width, height } = stableOverlaySize(b.width, circle);
     overlaySizes.set(index, { width, height });
     win.setBounds({ x: b.x, y: b.y, width, height }, false);
   });
@@ -286,7 +295,7 @@ ipcMain.on('resize-overlay', (_e, { index, delta }) => {
   const current = resizeAnimations.get(index) || {};
   const baseWidth = current.targetWidth || overlaySizes.get(index)?.width || win.getBounds().width;
   const normalizedDelta = Math.max(-120, Math.min(120, Number(delta) || 0));
-  current.targetWidth = Math.max(180, Math.min(1100, baseWidth * Math.exp(-normalizedDelta * 0.00115)));
+  current.targetWidth = stableOverlaySize(baseWidth * Math.exp(-normalizedDelta * 0.00115), config.appearance.shape === 'circle').width;
   resizeAnimations.set(index, current);
   if (current.timer) return;
 
