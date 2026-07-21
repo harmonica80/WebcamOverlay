@@ -24,7 +24,7 @@ async function useSource({ deviceId, name }) {
   if (!deviceId) { message.textContent = '尚未選擇攝影機'; return; }
   message.textContent = `正在連接 ${name}…`;
   try {
-    stream = await navigator.mediaDevices.getUserMedia({ video: { deviceId: { exact: deviceId }, width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } }, audio: false });
+    stream = await navigator.mediaDevices.getUserMedia({ video: { deviceId: { exact: deviceId }, width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30, max: 30 } }, audio: false });
     video.srcObject = stream; await video.play();
     video.style.display = 'block'; message.style.display = 'none';
     applyOptions(options);
