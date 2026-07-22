@@ -3,6 +3,7 @@ const video = document.getElementById('video');
 const canvas = document.getElementById('canvas');
 const context = canvas.getContext('2d');
 const frame = document.getElementById('frame');
+const shell = document.getElementById('shell');
 const message = document.getElementById('message');
 let stream;
 let options = { appearance: {}, video: { background: 'original' } };
@@ -24,7 +25,7 @@ async function useSource({ deviceId, name }) {
   if (!deviceId) { message.textContent = '尚未選擇攝影機'; return; }
   message.textContent = `正在連接 ${name}…`;
   try {
-    stream = await navigator.mediaDevices.getUserMedia({ video: { deviceId: { exact: deviceId }, width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30, max: 30 } }, audio: false });
+    stream = await navigator.mediaDevices.getUserMedia({ video: { deviceId: { exact: deviceId }, width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } }, audio: false });
     video.srcObject = stream; await video.play();
     video.style.display = 'block'; message.style.display = 'none';
     applyOptions(options);
@@ -44,8 +45,8 @@ function applyOptions(next) {
   frame.style.borderColor=a.borderColor||'#fff'; frame.style.borderWidth=`${a.borderWidth||0}px`;
   frame.style.borderRadius=a.shape==='circle'?'50%':a.shape==='rounded'?`${a.radius||20}px`:'0';
   frame.style.clipPath=a.shape==='circle'?'circle(50% at 50% 50%)':'none';
-  frame.style.filter=a.shadow?'drop-shadow(0 5px 7px #0006)':'none';
-  frame.style.inset=a.shadow?'14px':'2px';
+  shell.style.filter=a.shadow?'drop-shadow(0 5px 7px #0006)':'none';
+  shell.style.inset=a.shadow?'14px':'2px';
   frame.style.background=v.background==='remove'?'transparent':'#111';
   video.style.transform=v.mirror?'scaleX(-1)':'none'; canvas.style.transform=v.mirror?'scaleX(-1)':'none';
   video.style.objectFit='cover';

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, globalShortcut, screen, session, Tray, Menu, nativeImage, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, globalShortcut, screen, session, Tray, Menu, nativeImage, shell, dialog } = require('electron');
 const fs = require('fs');
 const path = require('path');
 
@@ -12,13 +12,6 @@ const dragSessions = new Map();
 const overlaySizes = new Map();
 const resizeAnimations = new Map();
 let saveTimer;
-
-// 16:9 視窗固定使用 32 像素級距，確保寬高皆為偶數，降低 Windows
-// 桌面合成器與螢幕錄影器在縮放透明視窗時產生的次像素抖動。
-function stableOverlaySize(rawWidth, circle = false) {
-  const width = Math.max(192, Math.min(1088, Math.round((Number(rawWidth) || 420) / 32) * 32));
-  return { width, height: circle ? width : width * 9 / 16 };
-}
 
 const defaults = {
   schemaVersion: 1,
@@ -75,7 +68,8 @@ function scheduleSave() {
 
 function createOverlay(index) {
   const saved = config.overlayBounds[index] || defaults.overlayBounds[index];
-  const { width: normalizedWidth, height: normalizedHeight } = stableOverlaySize(saved.width, config.appearance.shape === 'circle');
+  const normalizedWidth = Math.max(180, Math.min(1100, Number(saved.width) || 420));
+  const normalizedHeight = config.appearance.shape === 'circle' ? normalizedWidth : Math.round(normalizedWidth * 9 / 16);
   overlaySizes.set(index, { width: normalizedWidth, height: normalizedHeight });
   const area = screen.getPrimaryDisplay().workArea;
   const fallbackX = area.x + area.width - normalizedWidth - 28;
@@ -87,11 +81,7 @@ function createOverlay(index) {
     minWidth: 180, minHeight: 101,
     frame: false, transparent: true, backgroundColor: '#00000000',
     alwaysOnTop: true, skipTaskbar: true, show: false,
-    webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
-      contextIsolation: true,
-      backgroundThrottling: false
-    }
+    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true }
   });
   win.setResizable(false);
   win.setAlwaysOnTop(true, 'screen-saver');
@@ -126,6 +116,26 @@ function createSettings() {
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true }
   });
   settingsWindow.loadFile(path.join(__dirname, 'settings.html'));
+  settingsWindow.on('close', event => {
+    if (app.isQuiting) return;
+    event.preventDefault();
+    dialog.showMessageBox(settingsWindow, {
+      type: 'question',
+      title: '關閉 Webcam Overlay 設定',
+      message: '要結束程式，還是僅關閉設定視窗？',
+      buttons: ['僅關閉視窗', '結束程式'],
+      defaultId: 0,
+      cancelId: 0,
+      noLink: true
+    }).then(result => {
+      if (result.response === 1) {
+        app.isQuiting = true;
+        app.quit();
+      } else if (settingsWindow && !settingsWindow.isDestroyed()) {
+        settingsWindow.hide();
+      }
+    });
+  });
   settingsWindow.on('closed', () => { settingsWindow = null; });
 }
 
@@ -167,7 +177,7 @@ function createTray() {
     { label: '顯示 1 個', click: () => setMode(1) },
     { label: '顯示 2 個', click: () => setMode(2) },
     { label: '交換來源', click: () => { if (displayMode === 1) activeSingleSource = 1-activeSingleSource; else [config.sources[0],config.sources[1],config.sourceNames[0],config.sourceNames[1]]=[config.sources[1],config.sources[0],config.sourceNames[1],config.sourceNames[0]]; refreshOverlays(); } },
-    { type: 'separator' }, { label: '結束程式', click: () => app.quit() }
+    { type: 'separator' }, { label: '結束程式', click: () => { app.isQuiting = true; app.quit(); } }
   ]));
   tray.on('double-click', createSettings);
 }
@@ -203,7 +213,8 @@ function applyShapeGeometry() {
   overlays.forEach((win, index) => {
     if (!win || win.isDestroyed()) return;
     const b = win.getBounds();
-    const { width, height } = stableOverlaySize(b.width, circle);
+    const width = b.width;
+    const height = circle ? width : Math.round(width * 9 / 16);
     overlaySizes.set(index, { width, height });
     win.setBounds({ x: b.x, y: b.y, width, height }, false);
   });
@@ -295,7 +306,7 @@ ipcMain.on('resize-overlay', (_e, { index, delta }) => {
   const current = resizeAnimations.get(index) || {};
   const baseWidth = current.targetWidth || overlaySizes.get(index)?.width || win.getBounds().width;
   const normalizedDelta = Math.max(-120, Math.min(120, Number(delta) || 0));
-  current.targetWidth = stableOverlaySize(baseWidth * Math.exp(-normalizedDelta * 0.00115), config.appearance.shape === 'circle').width;
+  current.targetWidth = Math.max(180, Math.min(1100, baseWidth * Math.exp(-normalizedDelta * 0.00115)));
   resizeAnimations.set(index, current);
   if (current.timer) return;
 

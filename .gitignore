@@ -3,6 +3,6 @@ node_modules/
 .electron-cache/
 .builder-cache/
 release/*
-!release/WebcamOverlay-Portable-0.2.10.exe
+!release/WebcamOverlay-Portable-0.2.11.exe
 Data/
 *.log
