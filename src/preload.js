@@ -2,6 +2,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('desktop', {
   getState: () => ipcRenderer.invoke('get-state'),
   openExternal: url => ipcRenderer.invoke('open-external', url),
+  checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
   setMode: mode => ipcRenderer.send('set-mode', mode),
   saveSources: data => ipcRenderer.send('save-sources', data),
   saveOptions: data => ipcRenderer.send('save-options', data),
@@ -14,5 +15,6 @@ contextBridge.exposeInMainWorld('desktop', {
   onSourceChanged: fn => ipcRenderer.on('source-changed', (_e, data) => fn(data)),
   onOptionsChanged: fn => ipcRenderer.on('options-changed', (_e, data) => fn(data)),
   onVisibilityChanged: fn => ipcRenderer.on('visibility-changed', (_e, visible) => fn(visible)),
-  onStateChanged: fn => ipcRenderer.on('state-changed', (_e, data) => fn(data))
+  onStateChanged: fn => ipcRenderer.on('state-changed', (_e, data) => fn(data)),
+  onUpdateCheckResult: fn => ipcRenderer.on('update-check-result', (_e, data) => fn(data))
 });

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, globalShortcut, screen, session, Tray, Menu, nativeImage, shell, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, globalShortcut, screen, session, Tray, Menu, nativeImage, shell, dialog, net } = require('electron');
 const fs = require('fs');
 const path = require('path');
 
@@ -14,7 +14,7 @@ const resizeAnimations = new Map();
 let saveTimer;
 
 const defaults = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   sources: ['', ''],
   sourceNames: ['攝影機 1', '攝影機 2'],
   displayMode: 0,
@@ -25,6 +25,7 @@ const defaults = {
   ],
   appearance: { shape: 'rounded', borderColor: '#ffffff', borderWidth: 5, radius: 20, shadow: true },
   video: { background: 'original', blur: 14, mirror: true, fit: 'cover' },
+  sourceOptions: [],
   hotkeys: { cycle: 'Ctrl+Alt+C', hide: 'Ctrl+Alt+0', one: 'Ctrl+Alt+1', two: 'Ctrl+Alt+2', swap: 'Ctrl+Alt+S' }
 };
 
@@ -50,11 +51,32 @@ function loadConfig() {
     if (saved.hotkeys) {
       for (const key of Object.keys(saved.hotkeys)) saved.hotkeys[key] = saved.hotkeys[key].replace(/CommandOrControl/gi, 'Ctrl');
     }
-    return { ...defaults, ...saved, appearance: { ...defaults.appearance, ...saved.appearance }, video: { ...defaults.video, ...saved.video }, hotkeys: { ...defaults.hotkeys, ...saved.hotkeys } };
+    const merged = { ...defaults, ...saved, appearance: { ...defaults.appearance, ...saved.appearance }, video: { ...defaults.video, ...saved.video }, hotkeys: { ...defaults.hotkeys, ...saved.hotkeys } };
+    merged.sourceOptions = [0, 1].map(index => ({
+      appearance: { ...merged.appearance, ...(saved.sourceOptions?.[index]?.appearance || {}) },
+      video: { ...merged.video, ...(saved.sourceOptions?.[index]?.video || {}) }
+    }));
+    merged.schemaVersion = 2;
+    return merged;
   } catch { return structuredClone(defaults); }
 }
 
+function ensureSourceOptions() {
+  if (!Array.isArray(config.sourceOptions) || config.sourceOptions.length < 2) {
+    config.sourceOptions = [0, 1].map(() => ({
+      appearance: { ...config.appearance },
+      video: { ...config.video }
+    }));
+  }
+}
+
+function optionsForSource(index) {
+  ensureSourceOptions();
+  return config.sourceOptions[index] || { appearance: config.appearance, video: config.video };
+}
+
 function saveConfig() {
+  ensureSourceOptions();
   config.displayMode = displayMode;
   config.activeSingleSource = activeSingleSource;
   config.overlayBounds = overlays.map((w, i) => w && !w.isDestroyed() ? w.getBounds() : config.overlayBounds[i]);
@@ -69,7 +91,7 @@ function scheduleSave() {
 function createOverlay(index) {
   const saved = config.overlayBounds[index] || defaults.overlayBounds[index];
   const normalizedWidth = Math.max(180, Math.min(1100, Number(saved.width) || 420));
-  const normalizedHeight = config.appearance.shape === 'circle' ? normalizedWidth : Math.round(normalizedWidth * 9 / 16);
+  const normalizedHeight = optionsForSource(sourceForOverlay(index)).appearance.shape === 'circle' ? normalizedWidth : Math.round(normalizedWidth * 9 / 16);
   overlaySizes.set(index, { width: normalizedWidth, height: normalizedHeight });
   const area = screen.getPrimaryDisplay().workArea;
   const fallbackX = area.x + area.width - normalizedWidth - 28;
@@ -112,10 +134,14 @@ function createSettings() {
   }
   settingsWindow = new BrowserWindow({
     width: 780, height: 610, minWidth: 700, minHeight: 540,
-    title: 'Webcam Overlay 設定',
+    title: `Webcam Overlay 設定 v${app.getVersion()}`,
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true }
   });
   settingsWindow.loadFile(path.join(__dirname, 'settings.html'));
+  settingsWindow.webContents.on('page-title-updated', event => {
+    event.preventDefault();
+    settingsWindow?.setTitle(`Webcam Overlay 設定 v${app.getVersion()}`);
+  });
   settingsWindow.on('close', event => {
     if (app.isQuiting) return;
     event.preventDefault();
@@ -139,12 +165,79 @@ function createSettings() {
   settingsWindow.on('closed', () => { settingsWindow = null; });
 }
 
+async function checkForUpdates() {
+  const currentVersion = app.getVersion();
+  try {
+    const response = await net.fetch(`https://raw.githubusercontent.com/harmonica80/WebcamOverlay/main/package.json?t=${Date.now()}`);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const remotePackage = await response.json();
+    const latestVersion = String(remotePackage.version || '').trim();
+    if (!/^\d+\.\d+\.\d+$/.test(latestVersion)) throw new Error('invalid version');
+    const parts = version => version.split('.').map(Number);
+    const current = parts(currentVersion);
+    const latest = parts(latestVersion);
+    let comparison = 0;
+    for (let index = 0; index < 3; index++) {
+      if (latest[index] !== current[index]) { comparison = latest[index] > current[index] ? 1 : -1; break; }
+    }
+    return {
+      ok: true,
+      currentVersion,
+      latestVersion,
+      updateAvailable: comparison > 0,
+      downloadUrl: `https://github.com/harmonica80/WebcamOverlay/raw/main/release/WebcamOverlay-Portable-${latestVersion}.exe`
+    };
+  } catch {
+    return { ok: false, currentVersion, message: '目前無法連線至 GitHub 檢查新版本。' };
+  }
+}
+
+function createApplicationMenu() {
+  const sendUpdateResult = async () => {
+    createSettings();
+    const result = await checkForUpdates();
+    settingsWindow?.webContents.send('update-check-result', result);
+  };
+  Menu.setApplicationMenu(Menu.buildFromTemplate([
+    { label: '檔案', submenu: [
+      { label: '關閉設定視窗', accelerator: 'Ctrl+W', role: 'close' },
+      { type: 'separator' },
+      { label: '結束程式', accelerator: 'Alt+F4', click: () => { app.isQuiting = true; app.quit(); } }
+    ] },
+    { label: '編輯', submenu: [
+      { label: '復原', accelerator: 'Ctrl+Z', role: 'undo' },
+      { label: '重做', accelerator: 'Ctrl+Y', role: 'redo' },
+      { type: 'separator' },
+      { label: '剪下', accelerator: 'Ctrl+X', role: 'cut' },
+      { label: '複製', accelerator: 'Ctrl+C', role: 'copy' },
+      { label: '貼上', accelerator: 'Ctrl+V', role: 'paste' },
+      { label: '全選', accelerator: 'Ctrl+A', role: 'selectAll' }
+    ] },
+    { label: '檢視', submenu: [
+      { label: '實際大小', accelerator: 'Ctrl+0', role: 'resetZoom' },
+      { label: '放大', accelerator: 'Ctrl+Plus', role: 'zoomIn' },
+      { label: '縮小', accelerator: 'Ctrl+-', role: 'zoomOut' },
+      { type: 'separator' },
+      { label: '切換全螢幕', accelerator: 'F11', role: 'togglefullscreen' }
+    ] },
+    { label: '視窗', submenu: [
+      { label: '最小化', role: 'minimize' },
+      { label: '關閉', role: 'close' }
+    ] },
+    { label: '說明', submenu: [
+      { label: '檢查新版本', click: sendUpdateResult },
+      { label: '開發者網站', click: () => shell.openExternal('https://harmonica80.blogspot.com/') }
+    ] }
+  ]));
+}
+
 function sourceForOverlay(index) {
   if (displayMode === 1) return activeSingleSource;
   return index;
 }
 
 function refreshOverlays() {
+  applyShapeGeometry();
   overlays.forEach((win, index) => {
     if (!win || win.isDestroyed()) return;
     if (displayMode === 0 || (displayMode === 1 && index === 1)) {
@@ -157,7 +250,7 @@ function refreshOverlays() {
         deviceId: config.sources[sourceIndex] || '',
         name: config.sourceNames[sourceIndex] || `攝影機 ${sourceIndex + 1}`
       });
-      win.webContents.send('options-changed', { appearance: config.appearance, video: config.video });
+      win.webContents.send('options-changed', optionsForSource(sourceIndex));
       win.webContents.send('visibility-changed', true);
       win.showInactive();
     }
@@ -188,7 +281,7 @@ function setMode(mode) {
 }
 
 function currentState() {
-  return { ...config, displayMode, activeSingleSource };
+  return { ...config, displayMode, activeSingleSource, appVersion: app.getVersion() };
 }
 
 function registerHotkeys() {
@@ -209,14 +302,32 @@ function registerHotkeys() {
 }
 
 function applyShapeGeometry() {
-  const circle = config.appearance.shape === 'circle';
   overlays.forEach((win, index) => {
     if (!win || win.isDestroyed()) return;
-    const b = win.getBounds();
-    const width = b.width;
-    const height = circle ? width : Math.round(width * 9 / 16);
-    overlaySizes.set(index, { width, height });
-    win.setBounds({ x: b.x, y: b.y, width, height }, false);
+    const circle = optionsForSource(sourceForOverlay(index)).appearance.shape === 'circle';
+    const resize = resizeAnimations.get(index);
+    if (resize?.timer) clearInterval(resize.timer);
+    resizeAnimations.delete(index);
+
+    const apply = () => {
+      if (!win || win.isDestroyed()) return;
+      const b = win.getBounds();
+      const width = overlaySizes.get(index)?.width || b.width;
+      const height = circle ? width : Math.round(width * 9 / 16);
+      win.setAspectRatio(circle ? 1 : 16 / 9);
+      win.setBounds({
+        x: Math.round(b.x - (width - b.width) / 2),
+        y: Math.round(b.y - (height - b.height) / 2),
+        width,
+        height
+      }, false);
+      overlaySizes.set(index, { width, height });
+    };
+
+    apply();
+    // Windows 偶爾會在外觀重繪時保留上一個圓形視窗的 1:1 尺寸；
+    // 下一個事件循環再次套用，確保矩形類型恢復為 16:9。
+    setImmediate(apply);
   });
 }
 
@@ -226,6 +337,7 @@ app.whenReady().then(() => {
   displayMode = config.displayMode || 0;
   activeSingleSource = config.activeSingleSource || 0;
   overlays = [createOverlay(0), createOverlay(1)];
+  createApplicationMenu();
   createSettings();
   createTray();
   registerHotkeys();
@@ -241,8 +353,9 @@ app.on('activate', ensureAllOverlaysVisible);
 
 ipcMain.handle('get-state', () => currentState());
 ipcMain.handle('open-external', (_e, url) => {
-  if (url === 'https://harmonica80.blogspot.com/') return shell.openExternal(url);
+  if (url === 'https://harmonica80.blogspot.com/' || /^https:\/\/github\.com\/harmonica80\/WebcamOverlay\/(?:raw|releases)\//.test(url)) return shell.openExternal(url);
 });
+ipcMain.handle('check-for-updates', () => checkForUpdates());
 ipcMain.on('set-mode', (_e, mode) => setMode(Number(mode)));
 ipcMain.on('save-sources', (_e, data) => {
   config.sources = data.sources;
@@ -250,10 +363,22 @@ ipcMain.on('save-sources', (_e, data) => {
   refreshOverlays();
 });
 ipcMain.on('save-options', (_e, data) => {
-  config.appearance = { ...config.appearance, ...data.appearance };
-  config.video = { ...config.video, ...data.video };
+  ensureSourceOptions();
+  const target = data.target;
+  if (target === 'all') {
+    config.appearance = { ...config.appearance, ...data.appearance };
+    config.video = { ...config.video, ...data.video };
+    config.sourceOptions = [0, 1].map(() => ({ appearance: { ...config.appearance }, video: { ...config.video } }));
+  } else {
+    const sourceIndex = Number(target);
+    if (sourceIndex !== 0 && sourceIndex !== 1) return;
+    config.sourceOptions[sourceIndex] = {
+      appearance: { ...config.sourceOptions[sourceIndex].appearance, ...data.appearance },
+      video: { ...config.sourceOptions[sourceIndex].video, ...data.video }
+    };
+  }
   applyShapeGeometry();
-  overlays.forEach(win => win?.webContents.send('options-changed', { appearance: config.appearance, video: config.video }));
+  overlays.forEach((win, index) => win?.webContents.send('options-changed', optionsForSource(sourceForOverlay(index))));
   settingsWindow?.webContents.send('state-changed', currentState());
   scheduleSave();
 });
@@ -318,7 +443,8 @@ ipcMain.on('resize-overlay', (_e, { index, delta }) => {
     const difference = current.targetWidth - b.width;
     const nextWidth = Math.round(Math.abs(difference) < 0.75 ? current.targetWidth : b.width + difference * 0.12);
     const width = Math.max(180, Math.min(1100, nextWidth));
-    const height = config.appearance.shape === 'circle' ? width : Math.round(width * 9 / 16);
+    const circle = optionsForSource(sourceForOverlay(index)).appearance.shape === 'circle';
+    const height = circle ? width : Math.round(width * 9 / 16);
     if (width !== b.width || height !== b.height) {
       win.setBounds({
         x: Math.round(b.x - (width - b.width) / 2),
