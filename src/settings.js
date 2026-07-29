@@ -1,7 +1,28 @@
 const selects = [document.getElementById('source1'), document.getElementById('source2')];
 const status = document.getElementById('status');
 let state;
+let appearanceTarget = 'all';
 document.getElementById('developerLink').onclick=()=>window.desktop.openExternal('https://harmonica80.blogspot.com/');
+const updateButton=document.getElementById('checkUpdates');
+const versionStatus=document.getElementById('versionStatus');
+async function checkUpdates(){
+  updateButton.disabled=true;updateButton.textContent='正在檢查…';versionStatus.textContent='正在連線至 GitHub';
+  showUpdateResult(await window.desktop.checkForUpdates());
+}
+function showUpdateResult(result){
+  updateButton.disabled=false;
+  if(!result.ok){updateButton.textContent='重新檢查';versionStatus.textContent=`目前版本 v${result.currentVersion}　${result.message}`;updateButton.onclick=checkUpdates;return;}
+  if(result.updateAvailable){
+    updateButton.textContent=`下載新版本 v${result.latestVersion}`;
+    versionStatus.textContent=`目前版本 v${result.currentVersion}，已有新版本可下載。`;
+    updateButton.onclick=()=>window.desktop.openExternal(result.downloadUrl);
+  }else{
+    updateButton.textContent='再次檢查';versionStatus.textContent=`目前版本 v${result.currentVersion}，已是最新版本。`;
+    updateButton.onclick=checkUpdates;
+  }
+}
+updateButton.onclick=checkUpdates;
+window.desktop.onUpdateCheckResult(showUpdateResult);
 
 function option(value, text) { const o=document.createElement('option'); o.value=value; o.textContent=text; return o; }
 async function detect() {
@@ -30,7 +51,8 @@ document.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>window.desktop
 window.desktop.onStateChanged(s=>{state=s;paintMode(s.displayMode);});
 const controls=['shape','background','borderColor','borderWidth','radius','blur','mirror','shadow'];
 function fillOptions(s){
-  const values={...s.appearance,...s.video};
+  const selected = appearanceTarget === 'all' ? s : (s.sourceOptions?.[Number(appearanceTarget)] || s);
+  const values={...selected.appearance,...selected.video};
   controls.forEach(id=>{const e=document.getElementById(id);if(e.type==='checkbox')e.checked=!!values[id];else e.value=values[id]??e.value;});
   document.getElementById('borderWidthOut').value=`${values.borderWidth||0}px`;
   document.getElementById('radiusOut').value=`${values.radius||0}px`;
@@ -40,8 +62,14 @@ function fillOptions(s){
   setHotkey(document.getElementById('hkOne'),h.one||'');setHotkey(document.getElementById('hkTwo'),h.two||'');setHotkey(document.getElementById('hkSwap'),h.swap||'');
 }
 function sendOptions(){
-  window.desktop.saveOptions({appearance:{shape:document.getElementById('shape').value,borderColor:document.getElementById('borderColor').value,borderWidth:Number(document.getElementById('borderWidth').value),radius:Number(document.getElementById('radius').value),shadow:document.getElementById('shadow').checked},video:{background:document.getElementById('background').value,blur:Number(document.getElementById('blur').value),mirror:document.getElementById('mirror').checked}});
+  window.desktop.saveOptions({target:appearanceTarget,appearance:{shape:document.getElementById('shape').value,borderColor:document.getElementById('borderColor').value,borderWidth:Number(document.getElementById('borderWidth').value),radius:Number(document.getElementById('radius').value),shadow:document.getElementById('shadow').checked},video:{background:document.getElementById('background').value,blur:Number(document.getElementById('blur').value),mirror:document.getElementById('mirror').checked}});
 }
+document.querySelectorAll('[data-appearance-target]').forEach(button=>button.onclick=()=>{
+  appearanceTarget=button.dataset.appearanceTarget;
+  document.querySelectorAll('[data-appearance-target]').forEach(item=>item.classList.toggle('active',item===button));
+  document.getElementById('appearanceScopeHint').textContent=appearanceTarget==='all'?'以下設定會同步套用到兩個攝影機。':`以下設定只套用到攝影機 ${Number(appearanceTarget)+1}。`;
+  if(state)fillOptions(state);
+});
 let optionTimer;
 controls.forEach(id=>{const e=document.getElementById(id);e.addEventListener(e.type==='range'?'input':'change',()=>{if(['borderWidth','radius','blur'].includes(id))document.getElementById(`${id}Out`).value=`${e.value}px`;clearTimeout(optionTimer);optionTimer=setTimeout(sendOptions,40);});});
 document.querySelectorAll('.colorSwatch').forEach(button=>{
@@ -75,4 +103,4 @@ document.getElementById('saveHotkeys').onclick=async()=>{
   const result=await window.desktop.saveHotkeys({cycle:document.getElementById('hkCycle').dataset.value,hide:document.getElementById('hkHide').dataset.value,one:document.getElementById('hkOne').dataset.value,two:document.getElementById('hkTwo').dataset.value,swap:document.getElementById('hkSwap').dataset.value});
   document.getElementById('hotkeyStatus').textContent=result.message;
 };
-window.desktop.getState().then(s=>{state=s;paintMode(s.displayMode);fillOptions(s);detect();});
+window.desktop.getState().then(s=>{state=s;paintMode(s.displayMode);fillOptions(s);versionStatus.textContent=`目前版本 v${s.appVersion}`;detect();checkUpdates();});

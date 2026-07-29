@@ -1,0 +1,25 @@
+.updateArea {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.updateArea span {
+  color: #667085;
+  font-size: 13px;
+}
+
+#checkUpdates {
+  color: #174ea6;
+  border-color: #9db7df;
+  background: #f7faff;
+}
+
+#checkUpdates:hover { background: #edf4ff; }
+#checkUpdates:disabled { cursor: wait; opacity: .7; }
+
+@media (max-width: 650px) {
+  .updateArea { flex-direction: column; gap: 7px; }
+}
