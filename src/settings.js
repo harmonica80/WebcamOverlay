@@ -2,6 +2,41 @@ const selects = [document.getElementById('source1'), document.getElementById('so
 const status = document.getElementById('status');
 let state;
 let appearanceTarget = 'all';
+function arrangeSectionOrder(){
+  const quickPosition=document.querySelector('.quickPosition');
+  const appearance=[...document.querySelectorAll('main > section')].find(section=>section.querySelector(':scope > h2')?.textContent==='畫面與背景');
+  if(quickPosition&&appearance)appearance.after(quickPosition);
+}
+arrangeSectionOrder();
+function initializeAccordion(){
+  const sections=[...document.querySelectorAll('main > section')];
+  const setExpanded=(section,expanded)=>{
+    section.classList.toggle('collapsed',!expanded);
+    section.querySelector('.accordionToggle').setAttribute('aria-expanded',String(expanded));
+    section.querySelector('.accordionContent').hidden=!expanded;
+  };
+  sections.forEach((section,index)=>{
+    const heading=section.querySelector(':scope > h2');
+    if(!heading)return;
+    const title=heading.textContent;
+    const content=document.createElement('div');
+    content.className='accordionContent';
+    content.id=`accordion-content-${index}`;
+    while(heading.nextSibling)content.append(heading.nextSibling);
+    const toggle=document.createElement('button');
+    toggle.type='button';toggle.className='accordionToggle';toggle.setAttribute('aria-controls',content.id);
+    const label=document.createElement('span');label.textContent=title;
+    const arrow=document.createElement('span');arrow.className='accordionArrow';arrow.setAttribute('aria-hidden','true');
+    toggle.append(label,arrow);heading.replaceChildren(toggle);heading.className='accordionHeading';section.append(content);
+    toggle.onclick=()=>{
+      const opening=section.classList.contains('collapsed');
+      if(opening)sections.forEach(item=>setExpanded(item,false));
+      setExpanded(section,opening);
+    };
+    setExpanded(section,index===0);
+  });
+}
+initializeAccordion();
 document.getElementById('developerLink').onclick=()=>window.desktop.openExternal('https://harmonica80.blogspot.com/');
 const updateButton=document.getElementById('checkUpdates');
 const versionStatus=document.getElementById('versionStatus');
@@ -16,6 +51,10 @@ function showUpdateResult(result){
     updateButton.textContent=`下載新版本 v${result.latestVersion}`;
     versionStatus.textContent=`目前版本 v${result.currentVersion}，已有新版本可下載。`;
     updateButton.onclick=()=>window.desktop.openExternal(result.downloadUrl);
+  }else if(result.versionRelation==='local-newer'){
+    updateButton.textContent='再次檢查';
+    versionStatus.textContent=`目前版本 v${result.currentVersion}，高於 GitHub 最新公開版 v${result.latestVersion}。`;
+    updateButton.onclick=checkUpdates;
   }else{
     updateButton.textContent='再次檢查';versionStatus.textContent=`目前版本 v${result.currentVersion}，已是最新版本。`;
     updateButton.onclick=checkUpdates;
@@ -23,6 +62,20 @@ function showUpdateResult(result){
 }
 updateButton.onclick=checkUpdates;
 window.desktop.onUpdateCheckResult(showUpdateResult);
+let positionSource=0;
+const positionStatus=document.getElementById('positionStatus');
+document.querySelectorAll('[data-position-source]').forEach(button=>button.onclick=()=>{
+  positionSource=Number(button.dataset.positionSource);
+  document.querySelectorAll('[data-position-source]').forEach(item=>item.classList.toggle('active',item===button));
+});
+document.querySelectorAll('[data-position]').forEach(button=>button.onclick=()=>{
+  window.desktop.positionOverlay({sourceIndex:positionSource,position:button.dataset.position});
+  positionStatus.textContent=`已將攝影機 ${positionSource+1} 移到${button.title}。`;
+});
+document.querySelectorAll('[data-layout]').forEach(button=>button.onclick=()=>{
+  window.desktop.arrangeOverlays(button.dataset.layout);
+  positionStatus.textContent=`已套用「${button.textContent.trim()}」排列並顯示兩個攝影機。`;
+});
 
 function option(value, text) { const o=document.createElement('option'); o.value=value; o.textContent=text; return o; }
 async function detect() {

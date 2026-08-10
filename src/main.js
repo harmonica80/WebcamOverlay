@@ -185,6 +185,7 @@ async function checkForUpdates() {
       currentVersion,
       latestVersion,
       updateAvailable: comparison > 0,
+      versionRelation: comparison > 0 ? 'remote-newer' : comparison < 0 ? 'local-newer' : 'same',
       downloadUrl: `https://github.com/harmonica80/WebcamOverlay/raw/main/release/WebcamOverlay-Portable-${latestVersion}.exe`
     };
   } catch {
@@ -234,6 +235,59 @@ function createApplicationMenu() {
 function sourceForOverlay(index) {
   if (displayMode === 1) return activeSingleSource;
   return index;
+}
+
+function overlayIndexForSource(sourceIndex) {
+  if (displayMode === 1) return activeSingleSource === sourceIndex ? 0 : 1;
+  return sourceIndex;
+}
+
+function gridPosition(area, bounds, position, padding = 28) {
+  const [row, column] = position.split('-').map(Number);
+  const left = area.x + padding;
+  const right = area.x + area.width - bounds.width - padding;
+  const top = area.y + padding;
+  const bottom = area.y + area.height - bounds.height - padding;
+  const horizontal = [left, area.x + (area.width - bounds.width) / 2, right];
+  const vertical = [top, area.y + (area.height - bounds.height) / 2, bottom];
+  return {
+    x: Math.round(Math.max(area.x, Math.min(horizontal[column], area.x + area.width - bounds.width))),
+    y: Math.round(Math.max(area.y, Math.min(vertical[row], area.y + area.height - bounds.height)))
+  };
+}
+
+function moveOverlayToGrid(sourceIndex, position) {
+  if (!/^[0-2]-[0-2]$/.test(position)) return;
+  const index = overlayIndexForSource(sourceIndex);
+  const win = overlays[index];
+  if (!win || win.isDestroyed()) return;
+  const bounds = win.getBounds();
+  const area = screen.getDisplayMatching(bounds).workArea;
+  const target = gridPosition(area, bounds, position);
+  win.setPosition(target.x, target.y, false);
+  scheduleSave();
+}
+
+function arrangeOverlays(layout) {
+  const supported = new Set(['side-by-side', 'stacked', 'top-corners', 'bottom-corners', 'diagonal', 'reverse-diagonal']);
+  if (!supported.has(layout)) return;
+  setMode(2);
+  const first = overlays[0], second = overlays[1];
+  if (!first || !second || first.isDestroyed() || second.isDestroyed()) return;
+  const area = screen.getDisplayMatching(first.getBounds()).workArea;
+  const positions = {
+    'side-by-side': ['1-0', '1-2'],
+    stacked: ['0-1', '2-1'],
+    'top-corners': ['0-0', '0-2'],
+    'bottom-corners': ['2-0', '2-2'],
+    diagonal: ['0-0', '2-2'],
+    'reverse-diagonal': ['0-2', '2-0']
+  }[layout];
+  [first, second].forEach((win, index) => {
+    const target = gridPosition(area, win.getBounds(), positions[index]);
+    win.setPosition(target.x, target.y, false);
+  });
+  scheduleSave();
 }
 
 function refreshOverlays() {
@@ -357,6 +411,8 @@ ipcMain.handle('open-external', (_e, url) => {
 });
 ipcMain.handle('check-for-updates', () => checkForUpdates());
 ipcMain.on('set-mode', (_e, mode) => setMode(Number(mode)));
+ipcMain.on('position-overlay', (_e, data) => moveOverlayToGrid(Number(data.sourceIndex), String(data.position)));
+ipcMain.on('arrange-overlays', (_e, layout) => arrangeOverlays(String(layout)));
 ipcMain.on('save-sources', (_e, data) => {
   config.sources = data.sources;
   config.sourceNames = data.sourceNames;

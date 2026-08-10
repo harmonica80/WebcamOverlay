@@ -1,0 +1,24 @@
+.quickPosition h3 { margin: 0 0 10px; font-size: 14px; }
+.quickPositionColumns { display: grid; grid-template-columns: 210px 1fr; gap: 24px; align-items: start; }
+.positionSource { display: flex; gap: 7px; margin-bottom: 10px; }
+.positionSource button { flex: 1; padding: 7px 8px; }
+.positionSource button.active { color: #fff; background: #2463dc; border-color: #2463dc; }
+.nineGrid { width: 152px; aspect-ratio: 1; display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; padding: 7px; border: 1px solid #cbd5e1; border-radius: 12px; background: #f5f8fc; }
+.nineGrid button { position: relative; min-width: 0; padding: 0; border-radius: 7px; background: #fff; }
+.nineGrid button::after { content: ''; position: absolute; width: 13px; height: 9px; border-radius: 3px; background: #2463dc; top: 50%; left: 50%; transform: translate(-50%, -50%); }
+.nineGrid button:hover { border-color: #2463dc; background: #edf4ff; }
+.dualLayouts { display: grid; grid-template-columns: repeat(3, minmax(115px, 1fr)); gap: 9px; }
+.dualLayouts button { display: flex; flex-direction: column; align-items: center; gap: 6px; min-height: 76px; padding: 8px; font-size: 12px; }
+.layoutIcon { position: relative; display: block; width: 62px; height: 35px; border: 2px solid #9aa9bd; border-radius: 5px; background: #f8faff; }
+.layoutIcon i { position: absolute; display: block; width: 20px; height: 11px; border-radius: 2px; background: #2463dc; }
+.sideBySide i:first-child { left: 7px; top: 10px; }.sideBySide i:last-child { right: 7px; top: 10px; }
+.stacked i:first-child { left: 19px; top: 4px; }.stacked i:last-child { left: 19px; bottom: 4px; }
+.topCorners i:first-child { left: 4px; top: 4px; }.topCorners i:last-child { right: 4px; top: 4px; }
+.bottomCorners i:first-child { left: 4px; bottom: 4px; }.bottomCorners i:last-child { right: 4px; bottom: 4px; }
+.diagonal i:first-child { left: 4px; top: 4px; }.diagonal i:last-child { right: 4px; bottom: 4px; }
+.reverseDiagonal i:first-child { right: 4px; top: 4px; }.reverseDiagonal i:last-child { left: 4px; bottom: 4px; }
+#positionStatus { min-height: 18px; margin-bottom: 0; }
+@media (max-width: 720px) {
+  .quickPositionColumns { grid-template-columns: 1fr; }
+  .dualLayouts { grid-template-columns: repeat(2, minmax(115px, 1fr)); }
+}
