@@ -4,6 +4,8 @@ contextBridge.exposeInMainWorld('desktop', {
   openExternal: url => ipcRenderer.invoke('open-external', url),
   checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
   setMode: mode => ipcRenderer.send('set-mode', mode),
+  positionOverlay: data => ipcRenderer.send('position-overlay', data),
+  arrangeOverlays: layout => ipcRenderer.send('arrange-overlays', layout),
   saveSources: data => ipcRenderer.send('save-sources', data),
   saveOptions: data => ipcRenderer.send('save-options', data),
   saveHotkeys: data => ipcRenderer.invoke('save-hotkeys', data),

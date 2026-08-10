@@ -1,0 +1,48 @@
+main > section {
+  padding: 0;
+  overflow: hidden;
+  transition: border-color .16s ease, box-shadow .16s ease;
+}
+
+main > section:not(.collapsed) {
+  border-color: #b9cbea;
+  box-shadow: 0 5px 18px #20304a17;
+}
+
+.accordionHeading {
+  margin: 0;
+}
+
+.accordionToggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 18px 20px;
+  border: 0;
+  border-radius: 0;
+  background: #fff;
+  color: #182033;
+  font: inherit;
+  font-size: 19px;
+  font-weight: 700;
+  text-align: left;
+}
+
+.accordionToggle:hover { background: #f7faff; }
+.accordionToggle:focus-visible { outline: 3px solid #2463dc55; outline-offset: -3px; }
+
+.accordionArrow {
+  width: 11px;
+  height: 11px;
+  margin-right: 4px;
+  border-right: 2px solid #52657e;
+  border-bottom: 2px solid #52657e;
+  transform: rotate(45deg);
+  transition: transform .16s ease;
+}
+
+.accordionToggle[aria-expanded="true"] .accordionArrow { transform: rotate(225deg); }
+.accordionContent { padding: 0 20px 20px; }
+.accordionContent[hidden] { display: none; }
+.collapsed .accordionToggle { color: #334155; }
