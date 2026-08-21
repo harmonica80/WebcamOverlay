@@ -62,6 +62,8 @@ function showUpdateResult(result){
 }
 updateButton.onclick=checkUpdates;
 window.desktop.onUpdateCheckResult(showUpdateResult);
+document.querySelector('.quickPosition .accordionContent')?.insertAdjacentHTML('afterbegin','<div class="actions quickWindowAction"><button type="button" id="openQuickPosition" class="primary">開啟快速排列小視窗</button></div>');
+document.getElementById('openQuickPosition')?.addEventListener('click',()=>window.desktop.openQuickPosition());
 let positionSource=0;
 const positionStatus=document.getElementById('positionStatus');
 document.querySelectorAll('[data-position-source]').forEach(button=>button.onclick=()=>{
@@ -78,20 +80,42 @@ document.querySelectorAll('[data-layout]').forEach(button=>button.onclick=()=>{
 });
 
 function option(value, text) { const o=document.createElement('option'); o.value=value; o.textContent=text; return o; }
+function fillSourceSelects(devices) {
+  selects.forEach((select,i)=>{
+    const wanted=state?.sources?.[i]||select.value;
+    select.replaceChildren(option('', '不指定'));
+    devices.forEach((device,n)=>select.append(option(device.deviceId,device.label||`攝影機 ${n+1}`)));
+    if(wanted&&![...select.options].some(item=>item.value===wanted)){
+      select.append(option(wanted,state?.sourceNames?.[i]||`原有攝影機 ${i+1}`));
+    }
+    select.value=wanted;
+  });
+}
+async function videoInputs(){
+  return (await navigator.mediaDevices.enumerateDevices()).filter(device=>device.kind==='videoinput');
+}
 async function detect() {
   status.textContent='正在偵測攝影機…';
+  let devices=[];
   try {
-    const probe=await navigator.mediaDevices.getUserMedia({video:true,audio:false});
-    probe.getTracks().forEach(t=>t.stop());
-    const devices=(await navigator.mediaDevices.enumerateDevices()).filter(d=>d.kind==='videoinput');
-    selects.forEach((select,i)=>{
-      const wanted=state?.sources?.[i]||select.value;
-      select.replaceChildren(option('', '不指定'));
-      devices.forEach((d,n)=>select.append(option(d.deviceId,d.label||`攝影機 ${n+1}`)));
-      select.value=wanted;
-    });
+    devices=await videoInputs();
+    if(!devices.length||devices.every(device=>!device.label)){
+      const probe=await navigator.mediaDevices.getUserMedia({video:true,audio:false});
+      probe.getTracks().forEach(track=>track.stop());
+      devices=await videoInputs();
+    }
+    fillSourceSelects(devices);
     status.textContent=`找到 ${devices.length} 個攝影機來源。`;
-  } catch(e) { status.textContent='無法取得攝影機清單，請檢查 Windows 攝影機權限。'; }
+  } catch(error) {
+    console.error('Camera detection failed',error);
+    try{devices=await videoInputs();}catch{}
+    fillSourceSelects(devices);
+    status.textContent=devices.length
+      ?`找到 ${devices.length} 個攝影機來源。`
+      :state?.sources?.some(Boolean)
+        ?'目前無法重新偵測，已保留原有攝影機來源。'
+        :'無法取得攝影機清單，請檢查 Windows 攝影機權限。';
+  }
 }
 function paintMode(mode){document.querySelectorAll('[data-mode]').forEach(b=>b.classList.toggle('active',Number(b.dataset.mode)===mode));}
 document.getElementById('detect').onclick=detect;
@@ -156,4 +180,4 @@ document.getElementById('saveHotkeys').onclick=async()=>{
   const result=await window.desktop.saveHotkeys({cycle:document.getElementById('hkCycle').dataset.value,hide:document.getElementById('hkHide').dataset.value,one:document.getElementById('hkOne').dataset.value,two:document.getElementById('hkTwo').dataset.value,swap:document.getElementById('hkSwap').dataset.value});
   document.getElementById('hotkeyStatus').textContent=result.message;
 };
-window.desktop.getState().then(s=>{state=s;paintMode(s.displayMode);fillOptions(s);versionStatus.textContent=`目前版本 v${s.appVersion}`;detect();checkUpdates();});
+window.desktop.getState().then(s=>{state=s;paintMode(s.displayMode);fillOptions(s);fillSourceSelects([]);versionStatus.textContent=`目前版本 v${s.appVersion}`;detect();checkUpdates();});

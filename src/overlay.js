@@ -88,7 +88,12 @@ function drawCover(image,extra=0){
   if(sourceRatio>targetRatio){sw=ih*targetRatio;sx=(iw-sw)/2;}else{sh=iw/targetRatio;sy=(ih-sh)/2;}
   context.drawImage(image,sx,sy,sw,sh,-extra,-extra,canvas.width+extra*2,canvas.height+extra*2);
 }
-window.desktop.onSourceChanged(source=>{selectedSource=source;if(overlayVisible)useSource(source);});
+window.desktop.onSourceChanged(source=>{
+  const sameSource=source.deviceId===selectedSource.deviceId;
+  const hasLiveStream=stream?.active&&stream.getVideoTracks().some(track=>track.readyState==='live');
+  selectedSource=source;
+  if(overlayVisible&&(!sameSource||!hasLiveStream))useSource(source);
+});
 window.desktop.onOptionsChanged(applyOptions);
 window.desktop.onVisibilityChanged(visible=>{const wasVisible=overlayVisible;overlayVisible=visible;if(visible&&!wasVisible)useSource(selectedSource);else if(!visible)stopSource();});
 window.desktop.getState().then(state => {

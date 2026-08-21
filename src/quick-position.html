@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width">
+  <link rel="stylesheet" href="quick-position.css">
+  <title>快速排列</title>
+</head>
+<body>
+  <header class="titlebar">
+    <strong>快速排列</strong>
+    <div class="titlebarActions">
+      <button id="toggleCollapse" type="button" aria-label="折疊設定" title="折疊設定">−</button>
+      <button id="closeWindow" type="button" aria-label="關閉" title="關閉">×</button>
+    </div>
+  </header>
+  <main>
+    <div class="controlRow">
+      <label>排列模式
+        <select id="arrangeMode">
+          <option value="single">單一攝影機</option>
+          <option value="dual">雙攝影機</option>
+        </select>
+      </label>
+      <label id="cameraChoice">攝影機
+        <select id="cameraSource">
+          <option value="0">攝影機 1</option>
+          <option value="1">攝影機 2</option>
+        </select>
+      </label>
+    </div>
+
+    <section id="singlePanel">
+      <div class="nineGrid" aria-label="九宮格位置">
+        <button data-position="0-0" title="左上" aria-label="左上"></button><button data-position="0-1" title="上方置中" aria-label="上方置中"></button><button data-position="0-2" title="右上" aria-label="右上"></button>
+        <button data-position="1-0" title="左側置中" aria-label="左側置中"></button><button data-position="1-1" title="畫面中央" aria-label="畫面中央"></button><button data-position="1-2" title="右側置中" aria-label="右側置中"></button>
+        <button data-position="2-0" title="左下" aria-label="左下"></button><button data-position="2-1" title="下方置中" aria-label="下方置中"></button><button data-position="2-2" title="右下" aria-label="右下"></button>
+      </div>
+    </section>
+
+    <section id="dualPanel" hidden>
+      <div class="dualLayouts">
+        <button data-layout="side-by-side" title="左右並排" aria-label="左右並排"><span class="layoutIcon sideBySide"><i></i><i></i></span></button>
+        <button data-layout="stacked" title="上下排列" aria-label="上下排列"><span class="layoutIcon stacked"><i></i><i></i></span></button>
+        <button data-layout="top-corners" title="上方兩角" aria-label="上方兩角"><span class="layoutIcon topCorners"><i></i><i></i></span></button>
+        <button data-layout="bottom-corners" title="下方兩角" aria-label="下方兩角"><span class="layoutIcon bottomCorners"><i></i><i></i></span></button>
+        <button data-layout="diagonal" title="左上／右下" aria-label="左上／右下"><span class="layoutIcon diagonal"><i></i><i></i></span></button>
+        <button data-layout="reverse-diagonal" title="右上／左下" aria-label="右上／左下"><span class="layoutIcon reverseDiagonal"><i></i><i></i></span></button>
+      </div>
+    </section>
+
+    <footer>
+      <label class="topToggle"><input id="alwaysOnTop" type="checkbox" checked> 保持置頂</label>
+      <button id="openSettings" type="button">完整設定</button>
+    </footer>
+  </main>
+  <script src="quick-position.js"></script>
+</body>
+</html>
