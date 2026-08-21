@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 
 let settingsWindow;
+let quickPositionWindow;
 let overlays = [];
 let displayMode = 0;
 let activeSingleSource = 0;
@@ -12,6 +13,10 @@ const dragSessions = new Map();
 const overlaySizes = new Map();
 const resizeAnimations = new Map();
 let saveTimer;
+const QUICK_PANEL_WIDTH = 270;
+const QUICK_PANEL_COLLAPSED_HEIGHT = 46;
+const QUICK_PANEL_SINGLE_HEIGHT = 330;
+const QUICK_PANEL_DUAL_HEIGHT = 280;
 
 const defaults = {
   schemaVersion: 2,
@@ -26,6 +31,7 @@ const defaults = {
   appearance: { shape: 'rounded', borderColor: '#ffffff', borderWidth: 5, radius: 20, shadow: true },
   video: { background: 'original', blur: 14, mirror: true, fit: 'cover' },
   sourceOptions: [],
+  quickPanel: { bounds: { width: QUICK_PANEL_WIDTH, height: QUICK_PANEL_SINGLE_HEIGHT }, alwaysOnTop: true, mode: 'single', sourceIndex: 0, collapsed: false },
   hotkeys: { cycle: 'Ctrl+Alt+C', hide: 'Ctrl+Alt+0', one: 'Ctrl+Alt+1', two: 'Ctrl+Alt+2', swap: 'Ctrl+Alt+S' }
 };
 
@@ -80,6 +86,7 @@ function saveConfig() {
   config.displayMode = displayMode;
   config.activeSingleSource = activeSingleSource;
   config.overlayBounds = overlays.map((w, i) => w && !w.isDestroyed() ? w.getBounds() : config.overlayBounds[i]);
+  if (quickPositionWindow && !quickPositionWindow.isDestroyed()) config.quickPanel.bounds = quickPositionWindow.getBounds();
   fs.writeFileSync(configPath(), JSON.stringify(config, null, 2));
 }
 
@@ -163,6 +170,55 @@ function createSettings() {
     });
   });
   settingsWindow.on('closed', () => { settingsWindow = null; });
+}
+
+function createQuickPositionWindow() {
+  if (quickPositionWindow && !quickPositionWindow.isDestroyed()) {
+    quickPositionWindow.show(); quickPositionWindow.focus(); return;
+  }
+  const saved = config.quickPanel?.bounds || defaults.quickPanel.bounds;
+  const width = QUICK_PANEL_WIDTH;
+  const expandedHeight = config.quickPanel?.mode === 'dual' ? QUICK_PANEL_DUAL_HEIGHT : QUICK_PANEL_SINGLE_HEIGHT;
+  const collapsedHeight = QUICK_PANEL_COLLAPSED_HEIGHT;
+  const height = config.quickPanel?.collapsed === true ? collapsedHeight : expandedHeight;
+  const area = screen.getPrimaryDisplay().workArea;
+  const candidate = { x: Number.isFinite(saved.x) ? saved.x : area.x + area.width - width - 30, y: Number.isFinite(saved.y) ? saved.y : area.y + 30, width, height };
+  const visibleArea = screen.getDisplayMatching(candidate).workArea;
+  const x = Math.max(visibleArea.x, Math.min(candidate.x, visibleArea.x + visibleArea.width - width));
+  const y = Math.max(visibleArea.y, Math.min(candidate.y, visibleArea.y + visibleArea.height - height));
+  quickPositionWindow = new BrowserWindow({
+    x, y, width, height, minWidth: width, minHeight: collapsedHeight, maxWidth: width, maxHeight: QUICK_PANEL_SINGLE_HEIGHT,
+    frame: false, resizable: false, alwaysOnTop: config.quickPanel?.alwaysOnTop !== false,
+    skipTaskbar: true, show: false, backgroundColor: '#eef2f7',
+    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true }
+  });
+  quickPositionWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  quickPositionWindow.loadFile(path.join(__dirname, 'quick-position.html'));
+  quickPositionWindow.once('ready-to-show', () => quickPositionWindow?.show());
+  quickPositionWindow.on('moved', scheduleSave);
+  quickPositionWindow.on('close', event => {
+    if (app.isQuiting) return;
+    event.preventDefault(); quickPositionWindow.hide(); scheduleSave();
+  });
+  quickPositionWindow.on('closed', () => { quickPositionWindow = null; });
+}
+
+function resizeQuickPositionWindow(height) {
+  if (!quickPositionWindow || quickPositionWindow.isDestroyed()) return;
+  const width = QUICK_PANEL_WIDTH;
+  const current = quickPositionWindow.getBounds();
+  const area = screen.getDisplayMatching({ ...current, width, height }).workArea;
+  const x = Math.max(area.x, Math.min(current.x, area.x + area.width - width));
+  const y = Math.max(area.y, Math.min(current.y, area.y + area.height - height));
+  quickPositionWindow.setBounds({ x, y, width, height });
+}
+
+function setQuickPositionCollapsed(collapsed) {
+  if (!quickPositionWindow || quickPositionWindow.isDestroyed()) return;
+  config.quickPanel = { ...defaults.quickPanel, ...config.quickPanel, collapsed: !!collapsed };
+  const expandedHeight = config.quickPanel.mode === 'dual' ? QUICK_PANEL_DUAL_HEIGHT : QUICK_PANEL_SINGLE_HEIGHT;
+  resizeQuickPositionWindow(collapsed ? QUICK_PANEL_COLLAPSED_HEIGHT : expandedHeight);
+  scheduleSave();
 }
 
 async function checkForUpdates() {
@@ -319,6 +375,7 @@ function createTray() {
   tray.setToolTip('Webcam Overlay');
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: '開啟設定', click: createSettings },
+    { label: '快速排列', click: createQuickPositionWindow },
     { type: 'separator' },
     { label: '隱藏', click: () => setMode(0) },
     { label: '顯示 1 個', click: () => setMode(1) },
@@ -330,7 +387,9 @@ function createTray() {
 }
 
 function setMode(mode) {
-  displayMode = Math.max(0, Math.min(2, mode));
+  const nextMode = Math.max(0, Math.min(2, mode));
+  if (displayMode === nextMode) return;
+  displayMode = nextMode;
   refreshOverlays();
 }
 
@@ -385,7 +444,20 @@ function applyShapeGeometry() {
   });
 }
 
+const hasSingleInstanceLock = app.requestSingleInstanceLock();
+if (!hasSingleInstanceLock) {
+  app.quit();
+} else {
+app.on('second-instance', () => {
+  if (!app.isReady()) return;
+  createSettings();
+  if (settingsWindow?.isMinimized()) settingsWindow.restore();
+  settingsWindow?.show();
+  settingsWindow?.focus();
+});
+
 app.whenReady().then(() => {
+  session.defaultSession.setPermissionCheckHandler((_wc, permission) => permission === 'media');
   session.defaultSession.setPermissionRequestHandler((_wc, permission, callback) => callback(permission === 'media'));
   config = loadConfig();
   displayMode = config.displayMode || 0;
@@ -399,6 +471,7 @@ app.whenReady().then(() => {
   setTimeout(refreshOverlays, 700);
   setInterval(ensureAllOverlaysVisible, 1000);
 });
+}
 
 app.on('window-all-closed', () => app.quit());
 app.on('will-quit', () => { saveConfig(); globalShortcut.unregisterAll(); });
@@ -412,7 +485,29 @@ ipcMain.handle('open-external', (_e, url) => {
 ipcMain.handle('check-for-updates', () => checkForUpdates());
 ipcMain.on('set-mode', (_e, mode) => setMode(Number(mode)));
 ipcMain.on('position-overlay', (_e, data) => moveOverlayToGrid(Number(data.sourceIndex), String(data.position)));
+ipcMain.on('quick-position-single', (_e, data) => {
+  const nextSource = Number(data.sourceIndex) === 1 ? 1 : 0;
+  const sourceChanged = activeSingleSource !== nextSource;
+  activeSingleSource = nextSource;
+  if (displayMode !== 1) setMode(1);
+  else if (sourceChanged) refreshOverlays();
+  setImmediate(() => moveOverlayToGrid(activeSingleSource, String(data.position)));
+});
 ipcMain.on('arrange-overlays', (_e, layout) => arrangeOverlays(String(layout)));
+ipcMain.on('open-quick-position', createQuickPositionWindow);
+ipcMain.on('open-settings', createSettings);
+ipcMain.on('close-quick-position', () => quickPositionWindow?.hide());
+ipcMain.on('set-quick-panel-collapsed', (_e, collapsed) => setQuickPositionCollapsed(!!collapsed));
+ipcMain.on('save-quick-panel-state', (_e, data) => {
+  config.quickPanel = { ...defaults.quickPanel, ...config.quickPanel, mode: data.mode === 'dual' ? 'dual' : 'single', sourceIndex: Number(data.sourceIndex) === 1 ? 1 : 0 };
+  if (!config.quickPanel.collapsed) resizeQuickPositionWindow(config.quickPanel.mode === 'dual' ? QUICK_PANEL_DUAL_HEIGHT : QUICK_PANEL_SINGLE_HEIGHT);
+  scheduleSave();
+});
+ipcMain.on('set-quick-panel-top', (_e, enabled) => {
+  config.quickPanel = { ...defaults.quickPanel, ...config.quickPanel, alwaysOnTop: !!enabled };
+  quickPositionWindow?.setAlwaysOnTop(!!enabled, 'floating');
+  scheduleSave();
+});
 ipcMain.on('save-sources', (_e, data) => {
   config.sources = data.sources;
   config.sourceNames = data.sourceNames;
