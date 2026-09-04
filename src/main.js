@@ -4,6 +4,7 @@ const path = require('path');
 
 let settingsWindow;
 let quickPositionWindow;
+let quickPositionRequestedVisible = false;
 let overlays = [];
 let displayMode = 0;
 let activeSingleSource = 0;
@@ -126,13 +127,42 @@ function createOverlay(index) {
 function ensureOverlayVisible(index) {
   const win = overlays[index];
   if (!win || win.isDestroyed() || displayMode === 0 || (displayMode === 1 && index === 1)) return;
-  win.setAlwaysOnTop(true, 'screen-saver');
-  win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  if (!win.isAlwaysOnTop()) win.setAlwaysOnTop(true, 'screen-saver');
   if (!win.isVisible()) win.showInactive();
+}
+
+function ensureQuickPositionOnTop() {
+  if (!quickPositionRequestedVisible || !quickPositionWindow || quickPositionWindow.isDestroyed()) return;
+  if (quickPositionWindow.isMinimized()) quickPositionWindow.restore();
+  if (!quickPositionWindow.isVisible()) quickPositionWindow.showInactive();
+  if (config.quickPanel?.alwaysOnTop === false) return;
+  if (!quickPositionWindow.isAlwaysOnTop()) quickPositionWindow.setAlwaysOnTop(true, 'screen-saver');
+}
+
+function raiseQuickPositionOnTop() {
+  ensureQuickPositionOnTop();
+  if (!quickPositionWindow || quickPositionWindow.isDestroyed() || !quickPositionWindow.isVisible()) return;
+  if (config.quickPanel?.alwaysOnTop === false) return;
+  quickPositionWindow.moveTop();
+}
+
+function restoreQuickPositionAfterSettingsChange() {
+  if (!quickPositionRequestedVisible) return;
+  setTimeout(() => {
+    ensureQuickPositionOnTop();
+    if (config.quickPanel?.alwaysOnTop !== false) raiseQuickPositionOnTop();
+  }, 80);
+}
+
+function hideQuickPositionWindow() {
+  quickPositionRequestedVisible = false;
+  quickPositionWindow?.hide();
+  scheduleSave();
 }
 
 function ensureAllOverlaysVisible() {
   overlays.forEach((_win, index) => ensureOverlayVisible(index));
+  ensureQuickPositionOnTop();
 }
 
 function createSettings() {
@@ -149,6 +179,8 @@ function createSettings() {
     event.preventDefault();
     settingsWindow?.setTitle(`Webcam Overlay 設定 v${app.getVersion()}`);
   });
+  settingsWindow.on('minimize', restoreQuickPositionAfterSettingsChange);
+  settingsWindow.on('hide', restoreQuickPositionAfterSettingsChange);
   settingsWindow.on('close', event => {
     if (app.isQuiting) return;
     event.preventDefault();
@@ -166,6 +198,7 @@ function createSettings() {
         app.quit();
       } else if (settingsWindow && !settingsWindow.isDestroyed()) {
         settingsWindow.hide();
+        restoreQuickPositionAfterSettingsChange();
       }
     });
   });
@@ -173,8 +206,10 @@ function createSettings() {
 }
 
 function createQuickPositionWindow() {
+  quickPositionRequestedVisible = true;
   if (quickPositionWindow && !quickPositionWindow.isDestroyed()) {
-    quickPositionWindow.show(); quickPositionWindow.focus(); return;
+    if (quickPositionWindow.isMinimized()) quickPositionWindow.restore();
+    quickPositionWindow.show(); quickPositionWindow.focus(); raiseQuickPositionOnTop(); return;
   }
   const saved = config.quickPanel?.bounds || defaults.quickPanel.bounds;
   const width = QUICK_PANEL_WIDTH;
@@ -192,13 +227,20 @@ function createQuickPositionWindow() {
     skipTaskbar: true, show: false, backgroundColor: '#eef2f7',
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true }
   });
+  if (config.quickPanel?.alwaysOnTop !== false) quickPositionWindow.setAlwaysOnTop(true, 'screen-saver');
   quickPositionWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   quickPositionWindow.loadFile(path.join(__dirname, 'quick-position.html'));
-  quickPositionWindow.once('ready-to-show', () => quickPositionWindow?.show());
+  quickPositionWindow.once('ready-to-show', () => {
+    quickPositionWindow?.show();
+    raiseQuickPositionOnTop();
+  });
   quickPositionWindow.on('moved', scheduleSave);
+  quickPositionWindow.on('minimize', () => {
+    if (quickPositionRequestedVisible) setTimeout(ensureQuickPositionOnTop, 80);
+  });
   quickPositionWindow.on('close', event => {
     if (app.isQuiting) return;
-    event.preventDefault(); quickPositionWindow.hide(); scheduleSave();
+    event.preventDefault(); hideQuickPositionWindow();
   });
   quickPositionWindow.on('closed', () => { quickPositionWindow = null; });
 }
@@ -365,6 +407,7 @@ function refreshOverlays() {
       win.showInactive();
     }
   });
+  raiseQuickPositionOnTop();
   settingsWindow?.webContents.send('state-changed', currentState());
   saveConfig();
 }
@@ -496,7 +539,7 @@ ipcMain.on('quick-position-single', (_e, data) => {
 ipcMain.on('arrange-overlays', (_e, layout) => arrangeOverlays(String(layout)));
 ipcMain.on('open-quick-position', createQuickPositionWindow);
 ipcMain.on('open-settings', createSettings);
-ipcMain.on('close-quick-position', () => quickPositionWindow?.hide());
+ipcMain.on('close-quick-position', hideQuickPositionWindow);
 ipcMain.on('set-quick-panel-collapsed', (_e, collapsed) => setQuickPositionCollapsed(!!collapsed));
 ipcMain.on('save-quick-panel-state', (_e, data) => {
   config.quickPanel = { ...defaults.quickPanel, ...config.quickPanel, mode: data.mode === 'dual' ? 'dual' : 'single', sourceIndex: Number(data.sourceIndex) === 1 ? 1 : 0 };
@@ -505,7 +548,8 @@ ipcMain.on('save-quick-panel-state', (_e, data) => {
 });
 ipcMain.on('set-quick-panel-top', (_e, enabled) => {
   config.quickPanel = { ...defaults.quickPanel, ...config.quickPanel, alwaysOnTop: !!enabled };
-  quickPositionWindow?.setAlwaysOnTop(!!enabled, 'floating');
+  quickPositionWindow?.setAlwaysOnTop(!!enabled, 'screen-saver');
+  if (enabled) raiseQuickPositionOnTop();
   scheduleSave();
 });
 ipcMain.on('save-sources', (_e, data) => {

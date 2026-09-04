@@ -4,7 +4,7 @@
 
 ## 直接下載
 
-[下載 WebcamOverlay 0.2.24 免安裝版（EXE）](https://github.com/harmonica80/WebcamOverlay/raw/main/release/WebcamOverlay-Portable-0.2.24.exe)
+[下載 WebcamOverlay 0.2.27 免安裝版（EXE）](https://github.com/harmonica80/WebcamOverlay/raw/main/release/WebcamOverlay-Portable-0.2.27.exe)
 
 ## 功能總覽
 
