@@ -4,7 +4,7 @@
 
 ## 直接下載
 
-[下載 WebcamOverlay 0.2.27 免安裝版（EXE）](https://github.com/harmonica80/WebcamOverlay/raw/main/release/WebcamOverlay-Portable-0.2.27.exe)
+[下載 WebcamOverlay 0.2.29 免安裝版（EXE）](https://github.com/harmonica80/WebcamOverlay/releases/download/v0.2.29/WebcamOverlay-Portable-0.2.29.exe)
 
 ## 功能總覽
 
@@ -34,7 +34,13 @@
 - 圓角大小可調整，預設 20 px。
 - 陰影開關。
 - 圓形模式使用真正的圓形裁切，避免出現方形外露。
-- 水平鏡像。
+- 水平鏡像可自行開啟，預設為關閉。
+
+### 快速排列
+
+- 可折疊為僅顯示標題列，並能保持置頂。
+- 單一攝影機提供九宮格位置，雙攝影機提供六種快速排列。
+- 排列模式與攝影機選單採用視窗內選項，避免置頂狀態下選項自動關閉。
 
 ### 背景處理
 

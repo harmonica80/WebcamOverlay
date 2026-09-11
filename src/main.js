@@ -30,7 +30,7 @@ const defaults = {
     { width: 420, height: 236 }
   ],
   appearance: { shape: 'rounded', borderColor: '#ffffff', borderWidth: 5, radius: 20, shadow: true },
-  video: { background: 'original', blur: 14, mirror: true, fit: 'cover' },
+  video: { background: 'original', blur: 14, mirror: false, fit: 'cover' },
   sourceOptions: [],
   quickPanel: { bounds: { width: QUICK_PANEL_WIDTH, height: QUICK_PANEL_SINGLE_HEIGHT }, alwaysOnTop: true, mode: 'single', sourceIndex: 0, collapsed: false },
   hotkeys: { cycle: 'Ctrl+Alt+C', hide: 'Ctrl+Alt+0', one: 'Ctrl+Alt+1', two: 'Ctrl+Alt+2', swap: 'Ctrl+Alt+S' }
