@@ -2,6 +2,7 @@ const selects = [document.getElementById('source1'), document.getElementById('so
 const status = document.getElementById('status');
 let state;
 let appearanceTarget = 'all';
+let detectedDevices = [];
 function arrangeSectionOrder(){
   const quickPosition=document.querySelector('.quickPosition');
   const appearance=[...document.querySelectorAll('main > section')].find(section=>section.querySelector(':scope > h2')?.textContent==='畫面與背景');
@@ -105,10 +106,12 @@ async function detect() {
       devices=await videoInputs();
     }
     fillSourceSelects(devices);
+    detectedDevices=devices;
     status.textContent=`找到 ${devices.length} 個攝影機來源。`;
   } catch(error) {
     console.error('Camera detection failed',error);
     try{devices=await videoInputs();}catch{}
+    detectedDevices=devices;
     fillSourceSelects(devices);
     status.textContent=devices.length
       ?`找到 ${devices.length} 個攝影機來源。`
@@ -179,5 +182,27 @@ document.querySelectorAll('.hotkeyCapture').forEach(input=>{
 document.getElementById('saveHotkeys').onclick=async()=>{
   const result=await window.desktop.saveHotkeys({cycle:document.getElementById('hkCycle').dataset.value,hide:document.getElementById('hkHide').dataset.value,one:document.getElementById('hkOne').dataset.value,two:document.getElementById('hkTwo').dataset.value,swap:document.getElementById('hkSwap').dataset.value});
   document.getElementById('hotkeyStatus').textContent=result.message;
+};
+const resetButton=document.getElementById('resetSettings');
+const resetStatus=document.getElementById('resetStatus');
+resetButton.onclick=async()=>{
+  resetButton.disabled=true;
+  resetStatus.textContent='';
+  try{
+    const result=await window.desktop.resetSettings();
+    if(!result?.ok)return;
+    state=result.state;
+    appearanceTarget='all';
+    document.querySelectorAll('[data-appearance-target]').forEach(button=>button.classList.toggle('active',button.dataset.appearanceTarget==='all'));
+    document.getElementById('appearanceScopeHint').textContent='以下設定會同步套用到兩個攝影機。';
+    paintMode(state.displayMode);
+    fillOptions(state);
+    fillSourceSelects(detectedDevices);
+    status.textContent='攝影機來源已重設為不指定。';
+    document.getElementById('hotkeyStatus').textContent='快速鍵已恢復為預設值。';
+    resetStatus.textContent=result.message;
+  }finally{
+    resetButton.disabled=false;
+  }
 };
 window.desktop.getState().then(s=>{state=s;paintMode(s.displayMode);fillOptions(s);fillSourceSelects([]);versionStatus.textContent=`目前版本 v${s.appVersion}`;detect();checkUpdates();});

@@ -4,7 +4,7 @@
 
 ## 直接下載
 
-[下載 WebcamOverlay 0.2.29 免安裝版（EXE）](https://github.com/harmonica80/WebcamOverlay/releases/download/v0.2.29/WebcamOverlay-Portable-0.2.29.exe)
+[下載 WebcamOverlay 0.2.30 免安裝版（EXE）](https://github.com/harmonica80/WebcamOverlay/releases/download/v0.2.30/WebcamOverlay-Portable-0.2.30.exe)
 
 ## 功能總覽
 
@@ -64,6 +64,8 @@
 - 從系統匣快速開啟設定、切換顯示狀態、交換來源或結束程式。
 - 外觀與攝影機設定即時套用。
 - 設定保存於 `Data\settings.json`，可隨整個資料夾搬移。
+- 攝影機來源、顯示狀態、個別外觀、快速鍵及視窗位置會自動保存，下一次啟動時自動套用。
+- 設定視窗底部可將所有設定重設為預設值，執行前會再次確認。
 - 設定頁底部提供「述文老師學習網開發」連結。
 - 使用標準 PNG 應用程式與系統匣圖示。
 
