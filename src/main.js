@@ -436,6 +436,63 @@ function setMode(mode) {
   refreshOverlays();
 }
 
+function resetOverlayBounds() {
+  const area = screen.getPrimaryDisplay().workArea;
+  overlays.forEach((win, index) => {
+    if (!win || win.isDestroyed()) return;
+    const width = defaults.overlayBounds[index].width;
+    const height = Math.round(width * 9 / 16);
+    const x = area.x + area.width - width - 28;
+    const y = area.y + 28 + index * (height + 24);
+    overlaySizes.set(index, { width, height });
+    win.setAspectRatio(16 / 9);
+    win.setBounds({ x, y, width, height }, false);
+  });
+}
+
+function resetQuickPositionWindow() {
+  if (!quickPositionWindow || quickPositionWindow.isDestroyed()) return;
+  const area = screen.getPrimaryDisplay().workArea;
+  const width = QUICK_PANEL_WIDTH;
+  const height = QUICK_PANEL_SINGLE_HEIGHT;
+  quickPositionWindow.setAlwaysOnTop(true, 'screen-saver');
+  quickPositionWindow.setBounds({
+    x: area.x + area.width - width - 30,
+    y: area.y + 30,
+    width,
+    height
+  });
+  quickPositionWindow.webContents.reload();
+}
+
+async function resetSettingsToDefaults() {
+  const result = await dialog.showMessageBox(settingsWindow, {
+    type: 'warning',
+    title: '重設 Webcam Overlay',
+    message: '確定要重設為預設值嗎？',
+    detail: '攝影機來源、顯示狀態、畫面外觀、快速鍵及視窗位置都會恢復為預設值。',
+    buttons: ['重設為預設值', '取消'],
+    defaultId: 1,
+    cancelId: 1,
+    noLink: true
+  });
+  if (result.response !== 0) return { ok: false, cancelled: true };
+
+  config = structuredClone(defaults);
+  ensureSourceOptions();
+  displayMode = defaults.displayMode;
+  activeSingleSource = defaults.activeSingleSource;
+  dragSessions.clear();
+  resizeAnimations.forEach(item => { if (item?.timer) clearInterval(item.timer); });
+  resizeAnimations.clear();
+  registerHotkeys();
+  resetOverlayBounds();
+  resetQuickPositionWindow();
+  refreshOverlays();
+  saveConfig();
+  return { ok: true, state: currentState(), message: '所有設定已重設為預設值。' };
+}
+
 function currentState() {
   return { ...config, displayMode, activeSingleSource, appVersion: app.getVersion() };
 }
@@ -587,6 +644,7 @@ ipcMain.handle('save-hotkeys', (_e, hotkeys) => {
   }
   scheduleSave(); return { ok: true, message: '快速鍵已更新。' };
 });
+ipcMain.handle('reset-settings', resetSettingsToDefaults);
 ipcMain.on('overlay-click', (_e, index) => {
   if (displayMode === 1) activeSingleSource = 1 - activeSingleSource;
   else if (displayMode === 2) {

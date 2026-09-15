@@ -16,6 +16,7 @@ contextBridge.exposeInMainWorld('desktop', {
   saveSources: data => ipcRenderer.send('save-sources', data),
   saveOptions: data => ipcRenderer.send('save-options', data),
   saveHotkeys: data => ipcRenderer.invoke('save-hotkeys', data),
+  resetSettings: () => ipcRenderer.invoke('reset-settings'),
   overlayClick: index => ipcRenderer.send('overlay-click', index),
   dragStart: data => ipcRenderer.send('drag-start', data),
   moveOverlay: data => ipcRenderer.send('move-overlay', data),
