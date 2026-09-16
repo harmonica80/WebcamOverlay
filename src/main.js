@@ -37,7 +37,12 @@ const defaults = {
 };
 
 function configPath() {
-  const base = app.isPackaged ? path.dirname(process.execPath) : path.join(__dirname, '..');
+  // electron-builder 的 portable 啟動器會把應用程式解壓到暫存目錄；
+  // PORTABLE_EXECUTABLE_DIR 才是使用者實際存放 EXE 的固定位置。
+  const portableDirectory = process.env.PORTABLE_EXECUTABLE_DIR;
+  const base = app.isPackaged
+    ? (portableDirectory ? path.resolve(portableDirectory) : path.dirname(process.execPath))
+    : path.join(__dirname, '..');
   const local = path.join(base, 'Data');
   try {
     fs.mkdirSync(local, { recursive: true });
