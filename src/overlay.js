@@ -14,27 +14,40 @@ let down;
 let dragged = false;
 let overlayVisible = false;
 let selectedSource = { deviceId: '', name: '' };
+let sourceGeneration = 0;
 
 async function useSource({ deviceId, name }) {
   selectedSource = { deviceId, name };
+  stopSource();
   if (!overlayVisible) return;
-  clearTimeout(retryTimer);
-  processing = false;
-  if (stream) stream.getTracks().forEach(t => t.stop());
-  stream = null; video.srcObject = null; video.style.display = 'none'; message.style.display = 'grid';
+  const generation = sourceGeneration;
+  const isCurrent = () => generation === sourceGeneration && overlayVisible;
+  let acquiredStream;
+  message.style.display = 'grid';
   if (!deviceId) { message.textContent = '尚未選擇攝影機'; return; }
   message.textContent = `正在連接 ${name}…`;
   try {
-    stream = await navigator.mediaDevices.getUserMedia({ video: { deviceId: { exact: deviceId }, width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } }, audio: false });
+    acquiredStream = await navigator.mediaDevices.getUserMedia({ video: { deviceId: { exact: deviceId }, width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } }, audio: false });
+    if (!isCurrent()) { acquiredStream.getTracks().forEach(track => track.stop()); return; }
+    stream = acquiredStream;
+    stream.getVideoTracks().forEach(track => track.addEventListener('ended', () => {
+      if (isCurrent()) useSource(selectedSource);
+    }, { once: true }));
     video.srcObject = stream; await video.play();
+    if (!isCurrent()) return;
     video.style.display = 'block'; message.style.display = 'none';
     applyOptions(options);
   } catch (error) {
+    if (!isCurrent()) return;
+    if (acquiredStream) acquiredStream.getTracks().forEach(track => track.stop());
+    stream = null; video.srcObject = null;
+    video.style.display = 'none'; canvas.style.display = 'none'; message.style.display = 'grid';
     message.textContent = `${name}\n無法開啟或裝置正被占用\n5 秒後自動重試`;
-    retryTimer=setTimeout(()=>useSource({deviceId,name}),5000);
+    retryTimer=setTimeout(()=>{ if (isCurrent()) useSource(selectedSource); },5000);
   }
 }
 function stopSource(){
+  sourceGeneration++;
   clearTimeout(retryTimer);processing=false;
   if(stream)stream.getTracks().forEach(track=>track.stop());
   stream=null;video.srcObject=null;video.style.display='none';canvas.style.display='none';
