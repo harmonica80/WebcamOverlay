@@ -4,7 +4,9 @@
 
 ## 直接下載
 
-[下載 WebcamOverlay 0.2.31 免安裝版（EXE）](https://github.com/harmonica80/WebcamOverlay/releases/download/v0.2.31/WebcamOverlay-Portable-0.2.31.exe)
+v0.2.32 修正更換攝影機後，舊連線與自動重試干擾新來源的問題。保留既有設定；連線時隱藏視窗會釋放延遲取得的串流，使用中的攝影機中斷時會重新連線。六項受控測試通過，實體攝影機拔插與 Windows 視窗顯示仍需實機驗證。
+
+[下載 WebcamOverlay 0.2.32 免安裝版（EXE）](https://github.com/harmonica80/WebcamOverlay/releases/download/v0.2.32/WebcamOverlay-Portable-0.2.32.exe)
 
 ## 功能總覽
 
@@ -87,5 +89,7 @@ npm.cmd install
 npm.cmd start
 npm.cmd run build:portable
 ```
+
+攝影機連線生命週期回歸測試：`node --test scripts/test-source-lifecycle.js`。此為受控非同步測試；實體裝置拔插與 Windows 浮動視窗顯示仍需實機驗證。
 
 建置產物會放在 `release` 資料夾。專案原始碼位於 [GitHub WebcamOverlay](https://github.com/harmonica80/WebcamOverlay)。
