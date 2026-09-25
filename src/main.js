@@ -1,6 +1,8 @@
 const { app, BrowserWindow, ipcMain, globalShortcut, screen, session, Tray, Menu, nativeImage, shell, dialog, net } = require('electron');
 const fs = require('fs');
 const path = require('path');
+// Chromium currently ignores WebGPU powerPreference on Windows.
+app.commandLine.appendSwitch('force_high_performance_gpu');
 
 let settingsWindow;
 let quickPositionWindow;
@@ -21,6 +23,7 @@ const QUICK_PANEL_DUAL_HEIGHT = 280;
 
 const defaults = {
   schemaVersion: 2,
+  rememberSettings: false,
   sources: ['', ''],
   sourceNames: ['攝影機 1', '攝影機 2'],
   displayMode: 0,
@@ -30,7 +33,7 @@ const defaults = {
     { width: 420, height: 236 }
   ],
   appearance: { shape: 'rounded', borderColor: '#ffffff', borderWidth: 5, radius: 20, shadow: true },
-  video: { background: 'original', blur: 14, mirror: false, fit: 'cover' },
+  video: { background: 'original', matteQuality: 'quality', matteEdge: 15, matteFeather: 25, matteStability: 40, blur: 14, mirror: false, fit: 'cover' },
   sourceOptions: [],
   quickPanel: { bounds: { width: QUICK_PANEL_WIDTH, height: QUICK_PANEL_SINGLE_HEIGHT }, alwaysOnTop: true, mode: 'single', sourceIndex: 0, collapsed: false },
   hotkeys: { cycle: 'Ctrl+Alt+C', hide: 'Ctrl+Alt+0', one: 'Ctrl+Alt+1', two: 'Ctrl+Alt+2', swap: 'Ctrl+Alt+S' }
@@ -56,6 +59,7 @@ function configPath() {
 function loadConfig() {
   try {
     const saved = JSON.parse(fs.readFileSync(configPath(), 'utf8'));
+    if (saved.rememberSettings !== true) return structuredClone(defaults);
     if (!saved.schemaVersion) {
       saved.appearance = { ...saved.appearance, borderWidth: 5, radius: 20 };
       saved.schemaVersion = 1;
@@ -88,12 +92,13 @@ function optionsForSource(index) {
 }
 
 function saveConfig() {
+  if (!config) return;
   ensureSourceOptions();
   config.displayMode = displayMode;
   config.activeSingleSource = activeSingleSource;
   config.overlayBounds = overlays.map((w, i) => w && !w.isDestroyed() ? w.getBounds() : config.overlayBounds[i]);
   if (quickPositionWindow && !quickPositionWindow.isDestroyed()) config.quickPanel.bounds = quickPositionWindow.getBounds();
-  fs.writeFileSync(configPath(), JSON.stringify(config, null, 2));
+  fs.writeFileSync(configPath(), JSON.stringify(config.rememberSettings ? config : { rememberSettings: false }, null, 2));
 }
 
 function scheduleSave() {
@@ -289,7 +294,7 @@ async function checkForUpdates() {
       latestVersion,
       updateAvailable: comparison > 0,
       versionRelation: comparison > 0 ? 'remote-newer' : comparison < 0 ? 'local-newer' : 'same',
-      downloadUrl: `https://github.com/harmonica80/WebcamOverlay/raw/main/release/WebcamOverlay-Portable-${latestVersion}.exe`
+      downloadUrl: `https://github.com/harmonica80/WebcamOverlay/releases/download/v${latestVersion}/WebcamOverlay-Portable-${latestVersion}.exe`
     };
   } catch {
     return { ok: false, currentVersion, message: '目前無法連線至 GitHub 檢查新版本。' };
@@ -475,7 +480,7 @@ async function resetSettingsToDefaults() {
     type: 'warning',
     title: '重設 Webcam Overlay',
     message: '確定要重設為預設值嗎？',
-    detail: '攝影機來源、顯示狀態、畫面外觀、快速鍵及視窗位置都會恢復為預設值。',
+    detail: '攝影機來源、顯示狀態、畫面外觀、快速鍵及視窗位置都會恢復為預設值，並關閉記錄設定。',
     buttons: ['重設為預設值', '取消'],
     defaultId: 1,
     cancelId: 1,
@@ -648,6 +653,18 @@ ipcMain.handle('save-hotkeys', (_e, hotkeys) => {
     return { ok: false, message: '快速鍵格式錯誤，或已被其他程式占用。' };
   }
   scheduleSave(); return { ok: true, message: '快速鍵已更新。' };
+});
+ipcMain.handle('set-remember-settings', (_event, enabled) => {
+  const previous = config.rememberSettings;
+  config.rememberSettings = enabled === true;
+  try {
+    saveConfig();
+    settingsWindow?.webContents.send('state-changed', currentState());
+    return { ok: true, state: currentState() };
+  } catch {
+    config.rememberSettings = previous;
+    return { ok: false, message: '無法儲存記錄選項，請檢查資料夾寫入權限。' };
+  }
 });
 ipcMain.handle('reset-settings', resetSettingsToDefaults);
 ipcMain.on('overlay-click', (_e, index) => {

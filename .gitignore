@@ -6,3 +6,4 @@ release/*
 !release/WebcamOverlay-Portable-*.exe
 Data/
 *.log
+experiments/

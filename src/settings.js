@@ -83,7 +83,7 @@ document.querySelectorAll('[data-layout]').forEach(button=>button.onclick=()=>{
 function option(value, text) { const o=document.createElement('option'); o.value=value; o.textContent=text; return o; }
 function fillSourceSelects(devices) {
   selects.forEach((select,i)=>{
-    const wanted=state?.sources?.[i]||select.value;
+    const wanted=state?.sources?.[i]??select.value;
     select.replaceChildren(option('', '不指定'));
     devices.forEach((device,n)=>select.append(option(device.deviceId,device.label||`攝影機 ${n+1}`)));
     if(wanted&&![...select.options].some(item=>item.value===wanted)){
@@ -128,21 +128,30 @@ document.getElementById('save').onclick=()=>{
   window.desktop.saveSources({sources,sourceNames}); status.textContent='來源設定已套用。';
 };
 document.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>window.desktop.setMode(Number(b.dataset.mode)));
-window.desktop.onStateChanged(s=>{state=s;paintMode(s.displayMode);});
-const controls=['shape','background','borderColor','borderWidth','radius','blur','mirror','shadow'];
+window.desktop.onStateChanged(s=>{state=s;paintRememberSettings(s);paintMode(s.displayMode);});
+const controls=['shape','background','borderColor','borderWidth','radius','blur','mirror','shadow','matteQuality','matteEdge','matteFeather','matteStability'];
+function updateMatteControls(){
+  const original=document.getElementById('background').value==='original';
+  document.getElementById('matteQuality').disabled=original;
+  const disabled=original||document.getElementById('matteQuality').value!=='quality';
+  ['matteEdge','matteFeather','matteStability'].forEach(id=>document.getElementById(id).disabled=disabled);
+}
 function fillOptions(s){
   const selected = appearanceTarget === 'all' ? s : (s.sourceOptions?.[Number(appearanceTarget)] || s);
-  const values={...selected.appearance,...selected.video};
+  const values={matteQuality:'quality',matteEdge:15,matteFeather:25,matteStability:40,...selected.appearance,...selected.video};
   controls.forEach(id=>{const e=document.getElementById(id);if(e.type==='checkbox')e.checked=!!values[id];else e.value=values[id]??e.value;});
   document.getElementById('borderWidthOut').value=`${values.borderWidth||0}px`;
   document.getElementById('radiusOut').value=`${values.radius||0}px`;
   document.getElementById('blurOut').value=`${values.blur||14}px`;
+  ['matteEdge','matteFeather','matteStability'].forEach(id=>document.getElementById(`${id}Out`).value=`${values[id]}%`);
+  updateMatteControls();
   const h=s.hotkeys||{};
   setHotkey(document.getElementById('hkCycle'),h.cycle||'');setHotkey(document.getElementById('hkHide'),h.hide||'');
   setHotkey(document.getElementById('hkOne'),h.one||'');setHotkey(document.getElementById('hkTwo'),h.two||'');setHotkey(document.getElementById('hkSwap'),h.swap||'');
 }
 function sendOptions(){
-  window.desktop.saveOptions({target:appearanceTarget,appearance:{shape:document.getElementById('shape').value,borderColor:document.getElementById('borderColor').value,borderWidth:Number(document.getElementById('borderWidth').value),radius:Number(document.getElementById('radius').value),shadow:document.getElementById('shadow').checked},video:{background:document.getElementById('background').value,blur:Number(document.getElementById('blur').value),mirror:document.getElementById('mirror').checked}});
+  updateMatteControls();
+  window.desktop.saveOptions({target:appearanceTarget,appearance:{shape:document.getElementById('shape').value,borderColor:document.getElementById('borderColor').value,borderWidth:Number(document.getElementById('borderWidth').value),radius:Number(document.getElementById('radius').value),shadow:document.getElementById('shadow').checked},video:{matteQuality:document.getElementById('matteQuality').value,matteEdge:Number(document.getElementById('matteEdge').value),matteFeather:Number(document.getElementById('matteFeather').value),matteStability:Number(document.getElementById('matteStability').value),background:document.getElementById('background').value,blur:Number(document.getElementById('blur').value),mirror:document.getElementById('mirror').checked}});
 }
 document.querySelectorAll('[data-appearance-target]').forEach(button=>button.onclick=()=>{
   appearanceTarget=button.dataset.appearanceTarget;
@@ -151,7 +160,7 @@ document.querySelectorAll('[data-appearance-target]').forEach(button=>button.onc
   if(state)fillOptions(state);
 });
 let optionTimer;
-controls.forEach(id=>{const e=document.getElementById(id);e.addEventListener(e.type==='range'?'input':'change',()=>{if(['borderWidth','radius','blur'].includes(id))document.getElementById(`${id}Out`).value=`${e.value}px`;clearTimeout(optionTimer);optionTimer=setTimeout(sendOptions,40);});});
+controls.forEach(id=>{const e=document.getElementById(id);e.addEventListener(e.type==='range'?'input':'change',()=>{if(['borderWidth','radius','blur'].includes(id))document.getElementById(`${id}Out`).value=`${e.value}px`;if(id.startsWith('matte')&&id!=='matteQuality')document.getElementById(`${id}Out`).value=`${e.value}%`;clearTimeout(optionTimer);optionTimer=setTimeout(sendOptions,40);});});
 document.querySelectorAll('.colorSwatch').forEach(button=>{
   button.style.background=button.dataset.color;
   button.onclick=()=>{document.getElementById('borderColor').value=button.dataset.color;sendOptions();};
@@ -183,6 +192,22 @@ document.getElementById('saveHotkeys').onclick=async()=>{
   const result=await window.desktop.saveHotkeys({cycle:document.getElementById('hkCycle').dataset.value,hide:document.getElementById('hkHide').dataset.value,one:document.getElementById('hkOne').dataset.value,two:document.getElementById('hkTwo').dataset.value,swap:document.getElementById('hkSwap').dataset.value});
   document.getElementById('hotkeyStatus').textContent=result.message;
 };
+const rememberSettings=document.getElementById('rememberSettings');
+function paintRememberSettings(s){
+  rememberSettings.checked=s.rememberSettings===true;
+  document.getElementById('rememberHint').textContent=s.rememberSettings
+    ?'已開啟記錄，設定變更會自動保存並於下次啟動套用。'
+    :'不記錄本次設定；下次啟動使用預設值。';
+}
+rememberSettings.onchange=async()=>{
+  rememberSettings.disabled=true;
+  try{
+    const result=await window.desktop.setRememberSettings(rememberSettings.checked);
+    if(result.ok){state=result.state;paintRememberSettings(state);resetStatus.textContent='';}
+    else{paintRememberSettings(state);resetStatus.textContent=result.message;}
+  }catch{paintRememberSettings(state);resetStatus.textContent='無法變更記錄選項，請再試一次。';}
+  finally{rememberSettings.disabled=false;}
+};
 const resetButton=document.getElementById('resetSettings');
 const resetStatus=document.getElementById('resetStatus');
 resetButton.onclick=async()=>{
@@ -192,6 +217,7 @@ resetButton.onclick=async()=>{
     const result=await window.desktop.resetSettings();
     if(!result?.ok)return;
     state=result.state;
+    paintRememberSettings(state);
     appearanceTarget='all';
     document.querySelectorAll('[data-appearance-target]').forEach(button=>button.classList.toggle('active',button.dataset.appearanceTarget==='all'));
     document.getElementById('appearanceScopeHint').textContent='以下設定會同步套用到兩個攝影機。';
@@ -205,4 +231,4 @@ resetButton.onclick=async()=>{
     resetButton.disabled=false;
   }
 };
-window.desktop.getState().then(s=>{state=s;paintMode(s.displayMode);fillOptions(s);fillSourceSelects([]);versionStatus.textContent=`目前版本 v${s.appVersion}`;detect();checkUpdates();});
+window.desktop.getState().then(s=>{state=s;paintRememberSettings(s);paintMode(s.displayMode);fillOptions(s);fillSourceSelects([]);versionStatus.textContent=`目前版本 v${s.appVersion}`;detect();checkUpdates();});
