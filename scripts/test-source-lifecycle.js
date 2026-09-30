@@ -156,3 +156,15 @@ test('original background recovers from segmentation failure without covering th
   h.events.options({video:{background:'original'}});
   assert.equal(h.elements.message.style.display,'none');assert.equal(h.elements.video.style.display,'block');
 });
+
+test('image adjustments apply to video and segmented canvas without changing frame styling',()=>{
+ const h=setup();
+ for(const background of ['original','blur','remove']){
+  h.events.options({appearance:{borderColor:'#123456'},video:{background,brightness:135,contrast:120,saturation:80,hue:-20}});
+  assert.equal(h.elements.video.style.filter,'brightness(135%) contrast(120%) saturate(80%) hue-rotate(-20deg)');
+  assert.equal(h.elements.canvas.style.filter,h.elements.video.style.filter);
+  assert.equal(h.elements.frame.style.borderColor,'#123456');
+ }
+ h.events.options({video:{background:'original'}});
+ assert.equal(h.elements.video.style.filter,'brightness(100%) contrast(100%) saturate(100%) hue-rotate(0deg)');
+});

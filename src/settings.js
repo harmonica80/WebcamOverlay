@@ -129,7 +129,8 @@ document.getElementById('save').onclick=()=>{
 };
 document.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>window.desktop.setMode(Number(b.dataset.mode)));
 window.desktop.onStateChanged(s=>{state=s;paintRememberSettings(s);paintMode(s.displayMode);});
-const controls=['shape','background','borderColor','borderWidth','radius','blur','mirror','shadow','matteQuality','matteEdge','matteFeather','matteStability'];
+const imageDefaults={brightness:100,contrast:100,saturation:100,hue:0};
+const controls=[...Object.keys(imageDefaults),'shape','background','borderColor','borderWidth','radius','blur','mirror','shadow','matteQuality','matteEdge','matteFeather','matteStability'];
 function updateMatteControls(){
   const original=document.getElementById('background').value==='original';
   document.getElementById('matteQuality').disabled=original;
@@ -138,29 +139,37 @@ function updateMatteControls(){
 }
 function fillOptions(s){
   const selected = appearanceTarget === 'all' ? s : (s.sourceOptions?.[Number(appearanceTarget)] || s);
-  const values={matteQuality:'quality',matteEdge:15,matteFeather:25,matteStability:40,...selected.appearance,...selected.video};
+  const values={...imageDefaults,matteQuality:'quality',matteEdge:15,matteFeather:25,matteStability:40,...selected.appearance,...selected.video};
   controls.forEach(id=>{const e=document.getElementById(id);if(e.type==='checkbox')e.checked=!!values[id];else e.value=values[id]??e.value;});
   document.getElementById('borderWidthOut').value=`${values.borderWidth||0}px`;
   document.getElementById('radiusOut').value=`${values.radius||0}px`;
   document.getElementById('blurOut').value=`${values.blur||14}px`;
   ['matteEdge','matteFeather','matteStability'].forEach(id=>document.getElementById(`${id}Out`).value=`${values[id]}%`);
   updateMatteControls();
+  Object.keys(imageDefaults).forEach(id=>document.getElementById(`${id}Out`).value=`${values[id]}${id==='hue'?'°':'%'}`);
   const h=s.hotkeys||{};
   setHotkey(document.getElementById('hkCycle'),h.cycle||'');setHotkey(document.getElementById('hkHide'),h.hide||'');
   setHotkey(document.getElementById('hkOne'),h.one||'');setHotkey(document.getElementById('hkTwo'),h.two||'');setHotkey(document.getElementById('hkSwap'),h.swap||'');
 }
 function sendOptions(){
   updateMatteControls();
-  window.desktop.saveOptions({target:appearanceTarget,appearance:{shape:document.getElementById('shape').value,borderColor:document.getElementById('borderColor').value,borderWidth:Number(document.getElementById('borderWidth').value),radius:Number(document.getElementById('radius').value),shadow:document.getElementById('shadow').checked},video:{matteQuality:document.getElementById('matteQuality').value,matteEdge:Number(document.getElementById('matteEdge').value),matteFeather:Number(document.getElementById('matteFeather').value),matteStability:Number(document.getElementById('matteStability').value),background:document.getElementById('background').value,blur:Number(document.getElementById('blur').value),mirror:document.getElementById('mirror').checked}});
+  window.desktop.saveOptions({target:appearanceTarget,appearance:{shape:document.getElementById('shape').value,borderColor:document.getElementById('borderColor').value,borderWidth:Number(document.getElementById('borderWidth').value),radius:Number(document.getElementById('radius').value),shadow:document.getElementById('shadow').checked},video:{...Object.fromEntries(Object.keys(imageDefaults).map(id=>[id,Number(document.getElementById(id).value)])),matteQuality:document.getElementById('matteQuality').value,matteEdge:Number(document.getElementById('matteEdge').value),matteFeather:Number(document.getElementById('matteFeather').value),matteStability:Number(document.getElementById('matteStability').value),background:document.getElementById('background').value,blur:Number(document.getElementById('blur').value),mirror:document.getElementById('mirror').checked}});
 }
 document.querySelectorAll('[data-appearance-target]').forEach(button=>button.onclick=()=>{
+  if(optionTimer){clearTimeout(optionTimer);optionTimer=null;sendOptions();}
   appearanceTarget=button.dataset.appearanceTarget;
   document.querySelectorAll('[data-appearance-target]').forEach(item=>item.classList.toggle('active',item===button));
   document.getElementById('appearanceScopeHint').textContent=appearanceTarget==='all'?'以下設定會同步套用到兩個攝影機。':`以下設定只套用到攝影機 ${Number(appearanceTarget)+1}。`;
   if(state)fillOptions(state);
 });
 let optionTimer;
-controls.forEach(id=>{const e=document.getElementById(id);e.addEventListener(e.type==='range'?'input':'change',()=>{if(['borderWidth','radius','blur'].includes(id))document.getElementById(`${id}Out`).value=`${e.value}px`;if(id.startsWith('matte')&&id!=='matteQuality')document.getElementById(`${id}Out`).value=`${e.value}%`;clearTimeout(optionTimer);optionTimer=setTimeout(sendOptions,40);});});
+controls.forEach(id=>{const e=document.getElementById(id);e.addEventListener(e.type==='range'?'input':'change',()=>{if(['borderWidth','radius','blur'].includes(id))document.getElementById(`${id}Out`).value=`${e.value}px`;if(id in imageDefaults)document.getElementById(`${id}Out`).value=`${e.value}${id==='hue'?'°':'%'}`;if(id.startsWith('matte')&&id!=='matteQuality')document.getElementById(`${id}Out`).value=`${e.value}%`;clearTimeout(optionTimer);optionTimer=setTimeout(()=>{optionTimer=null;sendOptions();},40);});});
+document.getElementById('resetImageAdjustments').onclick=()=>{
+  clearTimeout(optionTimer);optionTimer=null;
+  Object.entries(imageDefaults).forEach(([id,value])=>{document.getElementById(id).value=value;document.getElementById(`${id}Out`).value=`${value}${id==='hue'?'°':'%'}`;});
+  sendOptions();
+};
+
 document.querySelectorAll('.colorSwatch').forEach(button=>{
   button.style.background=button.dataset.color;
   button.onclick=()=>{document.getElementById('borderColor').value=button.dataset.color;sendOptions();};

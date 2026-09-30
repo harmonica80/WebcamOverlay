@@ -81,6 +81,10 @@ function applyOptions(next) {
   shell.style.inset=a.shadow?'14px':'2px';
   frame.style.background=v.background==='remove'?'transparent':'#111';
   video.style.transform=v.mirror?'scaleX(-1)':'none'; canvas.style.transform=v.mirror?'scaleX(-1)':'none';
+  // Adjust the displayed image after segmentation to preserve mask alpha.
+  const adjustment=(key,fallback,min,max)=>Number.isFinite(v[key])?Math.max(min,Math.min(max,v[key])):fallback;
+  const imageFilter=`brightness(${adjustment('brightness',100,0,200)}%) contrast(${adjustment('contrast',100,0,200)}%) saturate(${adjustment('saturation',100,0,200)}%) hue-rotate(${adjustment('hue',0,-180,180)}deg)`;
+  video.style.filter=imageFilter;canvas.style.filter=imageFilter;
   video.style.objectFit='cover';
   if(v.background==='original'){canvas.style.display='none';video.style.display=stream?'block':'none';if(stream)message.style.display='none';stopSegmentation();}
   else {video.style.display='none';canvas.style.display=stream?'block':'none';startSegmentation();}
