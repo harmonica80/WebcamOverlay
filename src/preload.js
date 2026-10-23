@@ -1,5 +1,8 @@
 const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('desktop', {
+  reportOverlayHealth: data => ipcRenderer.send('overlay-health', data),
+  restartOverlays: () => ipcRenderer.invoke('restart-overlays'),
+  openDiagnostics: () => ipcRenderer.invoke('open-diagnostics'),
   getState: () => ipcRenderer.invoke('get-state'),
   openExternal: url => ipcRenderer.invoke('open-external', url),
   checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
@@ -15,6 +18,9 @@ contextBridge.exposeInMainWorld('desktop', {
   setQuickPanelTop: enabled => ipcRenderer.send('set-quick-panel-top', enabled),
   saveSources: data => ipcRenderer.send('save-sources', data),
   saveOptions: data => ipcRenderer.send('save-options', data),
+  saveDecoration: data => ipcRenderer.invoke('save-decoration', data),
+  importDecoration: () => ipcRenderer.invoke('import-decoration'),
+  loadDecoration: id => ipcRenderer.invoke('load-decoration', id),
   saveHotkeys: data => ipcRenderer.invoke('save-hotkeys', data),
   setRememberSettings: enabled => ipcRenderer.invoke('set-remember-settings', enabled),
   resetSettings: () => ipcRenderer.invoke('reset-settings'),

@@ -241,3 +241,11 @@ resetButton.onclick=async()=>{
   }
 };
 window.desktop.getState().then(s=>{state=s;paintRememberSettings(s);paintMode(s.displayMode);fillOptions(s);fillSourceSelects([]);versionStatus.textContent=`目前版本 v${s.appVersion}`;detect();checkUpdates();});
+
+document.getElementById('restartOverlays').onclick=async()=>{
+  const button=document.getElementById('restartOverlays');button.disabled=true;
+  try { const result=await window.desktop.restartOverlays();document.getElementById('recoveryStatus').textContent=result.message||'無法重新啟動。'; }
+  catch { document.getElementById('recoveryStatus').textContent='重新啟動失敗，請保留診斷紀錄。'; }
+  finally { setTimeout(()=>{button.disabled=false;},2000); }
+};
+document.getElementById('openDiagnostics').onclick=()=>window.desktop.openDiagnostics();

@@ -16,6 +16,8 @@ const dragSessions = new Map();
 const overlaySizes = new Map();
 const resizeAnimations = new Map();
 let saveTimer;
+let shuttingDown = false;
+const overlayHealth = [0, 1].map(() => ({ lastBeat: Date.now(), pending: null, attempts: [], unresponsiveAt: 0 }));
 const QUICK_PANEL_WIDTH = 270;
 const QUICK_PANEL_COLLAPSED_HEIGHT = 46;
 const QUICK_PANEL_SINGLE_HEIGHT = 330;
@@ -35,6 +37,7 @@ const defaults = {
   appearance: { shape: 'rounded', borderColor: '#ffffff', borderWidth: 5, radius: 20, shadow: true },
   video: { brightness: 100, contrast: 100, saturation: 100, hue: 0, background: 'original', matteQuality: 'quality', matteEdge: 15, matteFeather: 25, matteStability: 40, blur: 14, mirror: false, fit: 'cover' },
   sourceOptions: [],
+  decorations: [{ enabled: false }, { enabled: false }],
   quickPanel: { bounds: { width: QUICK_PANEL_WIDTH, height: QUICK_PANEL_SINGLE_HEIGHT }, alwaysOnTop: true, mode: 'single', sourceIndex: 0, collapsed: false },
   hotkeys: { cycle: 'Ctrl+Alt+C', hide: 'Ctrl+Alt+0', one: 'Ctrl+Alt+1', two: 'Ctrl+Alt+2', swap: 'Ctrl+Alt+S' }
 };
@@ -73,6 +76,7 @@ function loadConfig() {
       video: { ...merged.video, ...(saved.sourceOptions?.[index]?.video || {}) }
     }));
     merged.schemaVersion = 2;
+    merged.decorations = [0, 1].map(i => ({ ...(saved.decorations?.[i] || { enabled: false }) }));
     return merged;
   } catch { return structuredClone(defaults); }
 }
@@ -88,7 +92,7 @@ function ensureSourceOptions() {
 
 function optionsForSource(index) {
   ensureSourceOptions();
-  return config.sourceOptions[index] || { appearance: config.appearance, video: config.video };
+  return { ...(config.sourceOptions[index] || { appearance: config.appearance, video: config.video }), decoration: config.decorations?.[index] || { enabled: false } };
 }
 
 function saveConfig() {
@@ -121,7 +125,7 @@ function createOverlay(index) {
     minWidth: 180, minHeight: 101,
     frame: false, transparent: true, backgroundColor: '#00000000',
     alwaysOnTop: true, skipTaskbar: true, show: false,
-    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true }
+    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, backgroundThrottling: false }
   });
   win.setResizable(false);
   win.setAlwaysOnTop(true, 'screen-saver');
@@ -130,8 +134,83 @@ function createOverlay(index) {
   win.on('moved', scheduleSave);
   win.on('resized', scheduleSave);
   win.on('blur', () => ensureOverlayVisible(index));
-  win.on('closed', () => { overlays[index] = null; });
+  overlayHealth[index].lastBeat = Date.now();
+  overlayHealth[index].unresponsiveAt = 0;
+  win.webContents.on('did-finish-load', () => {
+    if (overlays[index] !== win || shuttingDown) return;
+    overlayHealth[index].lastBeat = Date.now();
+    diagnostic('overlay-loaded', { index });
+    refreshOverlays();
+  });
+  win.webContents.on('render-process-gone', (_event, details) => {
+    if (overlays[index] !== win) return;
+    diagnostic('renderer-gone', { index, reason: details.reason, exitCode: details.exitCode });
+    requestOverlayRecovery(index, 'renderer-gone');
+  });
+  win.on('unresponsive', () => { overlayHealth[index].unresponsiveAt = Date.now(); diagnostic('unresponsive', { index }); });
+  win.on('responsive', () => { overlayHealth[index].unresponsiveAt = 0; });
+  win.on('closed', () => {
+    if (overlays[index] !== win) return;
+    overlays[index] = null;
+    diagnostic('overlay-closed', { index });
+    requestOverlayRecovery(index, 'window-closed');
+  });
   return win;
+}
+
+
+// Bounded event log: no camera frames, device names, or device identifiers.
+function diagnostic(event, details = {}) {
+  try {
+    const file = path.join(path.dirname(configPath()), 'diagnostics.log');
+    if (fs.existsSync(file) && fs.statSync(file).size > 1024 * 1024) {
+      fs.copyFileSync(file, file + '.1'); fs.writeFileSync(file, '');
+    }
+    fs.appendFileSync(file, JSON.stringify({ time: new Date().toISOString(), event, ...details }) + '\n');
+  } catch { /* A logging failure must not interrupt video. */ }
+}
+function requestOverlayRecovery(index, reason, manual = false) {
+  if (shuttingDown || app.isQuiting) return false;
+  const health = overlayHealth[index];
+  if (health.pending) return false;
+  const now = Date.now();
+  health.attempts = health.attempts.filter(t => now - t < 60000);
+  const delay = !manual && health.attempts.length >= 3 ? 60000 : 250;
+  diagnostic('recovery-scheduled', { index, reason, delay });
+  health.pending = setTimeout(() => {
+    health.pending = null;
+    if (shuttingDown || app.isQuiting) return;
+    health.attempts.push(Date.now());
+    const old = overlays[index];
+    if (old && !old.isDestroyed()) config.overlayBounds[index] = old.getBounds();
+    // Detach before destroy so intentional closure cannot schedule another restart.
+    overlays[index] = null;
+    dragSessions.delete(index);
+    const animation = resizeAnimations.get(index);
+    if (animation?.timer) clearInterval(animation.timer);
+    resizeAnimations.delete(index);
+    if (old && !old.isDestroyed()) old.destroy();
+    try {
+      overlays[index] = createOverlay(index);
+      diagnostic('overlay-recreated', { index, reason });
+    } catch (error) {
+      diagnostic('recovery-failed', { index, message: String(error) });
+      requestOverlayRecovery(index, 'recreate-failed');
+    }
+  }, delay);
+  return true;
+}
+function checkOverlayHealth() {
+  if (shuttingDown) return;
+  [0, 1].forEach(index => {
+    if (displayMode === 0 || (displayMode === 1 && index === 1)) return;
+    const win = overlays[index], health = overlayHealth[index];
+    if (!win || win.isDestroyed()) { requestOverlayRecovery(index, 'missing-window'); return; }
+    if (win.isMinimized()) { win.restore(); diagnostic('window-restored', { index }); }
+    if (Date.now() - health.lastBeat > 30000 || (health.unresponsiveAt && Date.now() - health.unresponsiveAt > 15000)) {
+      requestOverlayRecovery(index, 'heartbeat-timeout');
+    }
+  });
 }
 
 function ensureOverlayVisible(index) {
@@ -441,7 +520,7 @@ function createTray() {
 
 function setMode(mode) {
   const nextMode = Math.max(0, Math.min(2, mode));
-  if (displayMode === nextMode) return;
+  if (displayMode === nextMode) { refreshOverlays(); return; }
   displayMode = nextMode;
   refreshOverlays();
 }
@@ -480,7 +559,7 @@ async function resetSettingsToDefaults() {
     type: 'warning',
     title: '重設 Webcam Overlay',
     message: '確定要重設為預設值嗎？',
-    detail: '攝影機來源、顯示狀態、畫面外觀、快速鍵及視窗位置都會恢復為預設值，並關閉記錄設定。',
+    detail: '攝影機來源、顯示狀態、畫面外觀、節慶裝飾、快速鍵及視窗位置都會恢復為預設值，並關閉記錄設定。已匯入的圖檔副本會保留。',
     buttons: ['重設為預設值', '取消'],
     defaultId: 1,
     cancelId: 1,
@@ -580,15 +659,66 @@ app.whenReady().then(() => {
   screen.on('display-metrics-changed', ensureAllOverlaysVisible);
   setTimeout(refreshOverlays, 700);
   setInterval(ensureAllOverlaysVisible, 1000);
+  setInterval(checkOverlayHealth, 2000);
+  diagnostic('startup', { version: app.getVersion() });
 });
 }
 
 app.on('window-all-closed', () => app.quit());
+app.on('before-quit', () => { shuttingDown = true; overlayHealth.forEach(h => clearTimeout(h.pending)); });
+app.on('child-process-gone', (_event, details) => {
+  if (details.type === 'GPU') { diagnostic('gpu-process-gone', { reason: details.reason, exitCode: details.exitCode }); [0, 1].forEach(i => requestOverlayRecovery(i, 'gpu-process-gone')); }
+});
 app.on('will-quit', () => { saveConfig(); globalShortcut.unregisterAll(); });
 app.on('browser-window-blur', ensureAllOverlaysVisible);
 app.on('activate', ensureAllOverlaysVisible);
 
+ipcMain.on('overlay-health', (event, data) => {
+  const index = overlays.findIndex(w => w && !w.isDestroyed() && w.webContents === event.sender);
+  if (index < 0) return;
+  const health = overlayHealth[index];
+  health.lastBeat = Date.now();
+  const status = { visible: !!data?.visible, readyState: Number(data?.readyState) || 0, paused: !!data?.paused, streamActive: !!data?.streamActive };
+  const signature = JSON.stringify(status);
+  if (signature !== health.signature) { health.signature = signature; diagnostic('video-state', { index, ...status }); }
+});
+ipcMain.handle('restart-overlays', event => {
+  if (event.sender !== settingsWindow?.webContents) return { ok: false };
+  [0, 1].forEach(index => { clearTimeout(overlayHealth[index].pending); overlayHealth[index].pending = null; requestOverlayRecovery(index, 'manual', true); });
+  return { ok: true, message: displayMode === 0 ? '已安排重新啟動；目前為隱藏模式，請選擇顯示 1 個或 2 個。' : '正在重新啟動攝影機畫面，請稍候數秒。' };
+});
+ipcMain.handle('open-diagnostics', event => {
+  if (event.sender === settingsWindow?.webContents) { diagnostic('user-open-log'); shell.showItemInFolder(path.join(path.dirname(configPath()), 'diagnostics.log')); }
+});
 ipcMain.handle('get-state', () => currentState());
+ipcMain.handle('save-decoration', (event, data) => {
+  if (event.sender !== settingsWindow?.webContents) return { ok: false, message: '請從設定視窗調整裝飾。' };
+  const target = data?.target;
+  if (!['all','0','1'].includes(target)) return { ok: false, message: '攝影機選擇不正確。' };
+  const { patch } = require('./decoration');
+  const previous = config.decorations;
+  config.decorations = [0,1].map(i => target === 'all' || String(i) === target
+    ? patch(config.decorations?.[i], data.patch || {}) : patch(config.decorations?.[i], {}));
+  try { saveConfig(); }
+  catch { config.decorations = previous; return { ok: false, message: '無法儲存裝飾設定，請檢查資料夾權限。' }; }
+  overlays.forEach((win,index) => { if (win && !win.isDestroyed()) win.webContents.send('options-changed',optionsForSource(sourceForOverlay(index))); });
+  settingsWindow.webContents.send('state-changed',currentState());
+  return { ok: true, state: currentState() };
+});
+ipcMain.handle('import-decoration', async event => {
+  if (event.sender !== settingsWindow?.webContents) return { ok: false, message: '請從設定視窗匯入圖檔。' };
+  const result = await dialog.showOpenDialog(settingsWindow, {title:'選擇透明 PNG／APNG 裝飾',properties:['openFile'],filters:[{name:'PNG／APNG 圖檔',extensions:['png','apng']}]});
+  if (result.canceled || !result.filePaths.length) return { ok:false,cancelled:true };
+  try {
+    const imported = await require('./decoration-files').importAsset(result.filePaths[0],path.join(path.dirname(configPath()),'decorations'),nativeImage);
+    return {ok:true,...imported};
+  } catch (error) { return {ok:false,message:error.message}; }
+});
+ipcMain.handle('load-decoration', async (event,id) => {
+  if (event.sender !== settingsWindow?.webContents && !overlays.some(w => w && !w.isDestroyed() && w.webContents === event.sender)) return {ok:false,message:'無法載入圖檔。'};
+  try { return await require('./decoration-files').loadAsset(id,path.join(path.dirname(configPath()),'decorations'),nativeImage); }
+  catch { return {ok:false,message:'找不到圖檔或檔案已損壞，請重新匯入。'}; }
+});
 ipcMain.handle('open-external', (_e, url) => {
   if (url === 'https://harmonica80.blogspot.com/' || /^https:\/\/github\.com\/harmonica80\/WebcamOverlay\/(?:raw|releases)\//.test(url)) return shell.openExternal(url);
 });

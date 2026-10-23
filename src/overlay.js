@@ -6,6 +6,10 @@ const frame = document.getElementById('frame');
 const shell = document.getElementById('shell');
 const message = document.getElementById('message');
 const matteStatus = document.getElementById('matteStatus');
+const decorationRenderer = window.Decorations?.createRenderer(document.getElementById('decoration'), id => window.desktop.loadDecoration(id), message => {
+  const label = document.getElementById('decorationError');
+  label.textContent = message; label.hidden = !message;
+});
 let stream;
 let options = { appearance: {}, video: { background: 'original' } };
 let segmenter;
@@ -74,6 +78,7 @@ function applyOptions(next) {
   if (signature !== matteSignature) { resetMatte(); matteSignature = signature; advancedFailed = false; }
   options = next;
   const a=options.appearance||{}, v=options.video||{};
+  decorationRenderer?.update(next.decoration, a.shape, overlayVisible);
   frame.style.borderColor=a.borderColor||'#fff'; frame.style.borderWidth=`${a.borderWidth||0}px`;
   frame.style.borderRadius=a.shape==='circle'?'50%':a.shape==='rounded'?`${a.radius||20}px`:'0';
   frame.style.clipPath=a.shape==='circle'?'circle(50% at 50% 50%)':'none';
@@ -194,12 +199,13 @@ window.desktop.onSourceChanged(source=>{
   if(overlayVisible&&(!sameSource||!hasLiveStream))useSource(source);
 });
 window.desktop.onOptionsChanged(applyOptions);
-window.desktop.onVisibilityChanged(visible=>{const wasVisible=overlayVisible;overlayVisible=visible;if(visible&&!wasVisible)useSource(selectedSource);else if(!visible)stopSource();});
+window.desktop.onVisibilityChanged(visible=>{const wasVisible=overlayVisible;overlayVisible=visible;decorationRenderer?.update(options.decoration, options.appearance?.shape, visible);if(visible&&!wasVisible)useSource(selectedSource);else if(!visible)stopSource();});
 window.desktop.getState().then(state => {
   const sourceIndex=state.displayMode===1?state.activeSingleSource:index;
-  applyOptions(state.sourceOptions?.[sourceIndex] || state);
+  applyOptions({ ...(state.sourceOptions?.[sourceIndex] || state), decoration: state.decorations?.[sourceIndex] });
   selectedSource={deviceId:state.sources[sourceIndex]||'',name:state.sourceNames[sourceIndex]||''};
   overlayVisible=state.displayMode===2||(state.displayMode===1&&index===0);
+  decorationRenderer?.update(options.decoration, options.appearance?.shape, overlayVisible);
   if(overlayVisible)useSource(selectedSource);
 });
 addEventListener('wheel', e => { e.preventDefault(); window.desktop.resizeOverlay({ index, delta: e.deltaY }); }, { passive: false });
@@ -227,3 +233,7 @@ addEventListener('click', () => {
 });
 addEventListener('blur', () => { if (down) window.desktop.dragEnd(index); down=null; });
 
+
+if (window.desktop.reportOverlayHealth) {
+  setInterval(() => window.desktop.reportOverlayHealth({ visible: overlayVisible, readyState: video.readyState, paused: video.paused, streamActive: !!stream?.active }), 2000);
+}

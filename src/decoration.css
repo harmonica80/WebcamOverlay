@@ -1,0 +1,77 @@
+.decoration-layer{position:absolute;inset:0;pointer-events:none;z-index:2;overflow:hidden}
+.decoration-layer[hidden]{display:none!important}
+.decoration-content{position:absolute;inset:0;pointer-events:none}
+.decoration-content>svg,.decoration-content>img{display:block;width:100%;height:100%;object-fit:contain;pointer-events:none}
+.decoration-layer.sticker .decoration-content{inset:auto;left:var(--deco-x);top:var(--deco-y);width:var(--deco-size);height:var(--deco-size);transform:translate(var(--deco-tx),var(--deco-ty))}
+.animated .deco-motion{transform-box:fill-box;transform-origin:center;animation-duration:3.8s;animation-iteration-count:infinite;animation-timing-function:ease-in-out}
+.animated .deco-sway{animation-name:deco-sway}
+.animated .deco-float{animation-name:deco-float}
+.animated .deco-twinkle{animation-name:deco-twinkle}
+@keyframes deco-sway{0%,100%{transform:rotate(-5deg)}50%{transform:rotate(5deg)}}
+@keyframes deco-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+@keyframes deco-twinkle{0%,100%{opacity:.55;transform:scale(.9)}50%{opacity:1;transform:scale(1.04)}}
+.deco-sized{transform:scale(var(--deco-scene-scale,1))}
+.deco-particle{transform:translateY(var(--rest-y));opacity:.85}
+.deco-fly{transform:translateX(var(--rest-x))}
+.animated .deco-particle{animation-duration:var(--duration);animation-delay:var(--delay);animation-iteration-count:infinite;animation-timing-function:linear}
+.animated .deco-fall{animation-name:deco-fall}
+.animated .deco-rise{animation-name:deco-rise}
+.animated .deco-sparkle{animation-name:deco-sparkle}
+.animated .deco-fly{animation-name:deco-fly}
+.animated .deco-drift{animation:deco-drift var(--drift-duration) ease-in-out var(--delay) infinite alternate}
+.animated .deco-fly .deco-drift{animation-name:deco-bob}
+.animated .deco-fall .deco-spin{animation:deco-spin var(--spin-duration) linear var(--delay) infinite}
+.animated .deco-rise .deco-spin,.animated .deco-fly .deco-spin{animation:deco-tilt var(--spin-duration) ease-in-out var(--delay) infinite alternate}
+@keyframes deco-fall{from{transform:translateY(-80px)}to{transform:translateY(var(--travel-end))}}
+@keyframes deco-rise{from{transform:translateY(var(--travel-end))}to{transform:translateY(-80px)}}
+@keyframes deco-fly{from{transform:translateX(-80px)}to{transform:translateX(720px)}}
+@keyframes deco-bob{from{transform:translateY(0)}to{transform:translateY(var(--drift))}}
+@keyframes deco-drift{from{transform:translateX(0)}to{transform:translateX(var(--drift))}}
+@keyframes deco-spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+@keyframes deco-tilt{from{transform:rotate(-12deg)}to{transform:rotate(12deg)}}
+@keyframes deco-sparkle{0%,100%{opacity:.15}45%,60%{opacity:.95}}
+.rich-sprite{pointer-events:none;overflow:hidden}
+.rich-motion{transform-box:view-box;transform-origin:0 0}
+.animated .rich-motion{transform-box:view-box;transform-origin:0 0;animation-delay:var(--rich-delay,0s);animation-duration:6s;animation-timing-function:ease-in-out}
+.animated .rich-lantern{transform-origin:0 var(--pivot-y);animation-name:rich-lantern}
+.animated .rich-branch{animation-name:rich-branch;animation-duration:9s}
+.animated .rich-bob{animation-name:rich-bob;animation-duration:7s}
+.animated .rich-cloud{animation-name:rich-cloud;animation-duration:12s}
+.animated .rich-hop{animation-name:rich-hop;animation-duration:6s}
+.animated .rich-glow{animation-name:rich-glow;animation-duration:8s}
+.animated .rich-firework{animation-name:rich-firework;animation-duration:5.5s}
+.animated .rich-toss{animation-name:rich-toss;animation-duration:7s}
+.animated .rich-toss-small{animation-name:rich-toss-small;animation-duration:6s}
+.animated .rich-plane{animation-name:rich-plane;animation-duration:10s;animation-timing-function:linear}
+@keyframes rich-lantern{0%,100%{transform:rotate(-5deg)}50%{transform:rotate(6deg)}}
+@keyframes rich-branch{0%,100%{transform:rotate(-1deg)}50%{transform:rotate(2deg)}}
+@keyframes rich-bob{0%,100%{transform:translateY(0) rotate(-2deg)}50%{transform:translateY(-6px) rotate(2deg)}}
+@keyframes rich-cloud{0%,100%{transform:translate(-8px,0)}50%{transform:translate(9px,-4px)}}
+@keyframes rich-hop{0%,30%,65%,100%{transform:translateY(0)}45%{transform:translateY(-15px) rotate(-4deg)}53%{transform:translateY(-11px) rotate(3deg)}}
+@keyframes rich-glow{0%,100%{opacity:.85}50%{opacity:1}}
+@keyframes rich-firework{0%,100%{opacity:0;transform:scale(.15)}25%{opacity:.9;transform:scale(.8)}60%{opacity:.6;transform:scale(1.12)}82%{opacity:0;transform:scale(1.25)}}
+@keyframes rich-toss{0%,100%{transform:translateY(22px) rotate(-15deg)}45%{transform:translateY(-39px) rotate(13deg)}}
+@keyframes rich-toss-small{0%,100%{transform:translateY(8px) rotate(-10deg)}45%{transform:translateY(-15px) rotate(13deg)}}
+@keyframes rich-plane{0%{opacity:0;transform:translate(-190px,-25px) rotate(-8deg)}12%{opacity:1}80%{opacity:1}100%{opacity:0;transform:translate(160px,-60px) rotate(10deg)}}
+.decoration-settings .deco-toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:12px 0}
+.decoration-settings .deco-toolbar label{display:flex;align-items:center;gap:6px}
+.decoration-settings input[type=checkbox]{accent-color:#2463dc}
+.deco-preview{position:relative;width:min(100%,360px);aspect-ratio:16/9;margin:auto;border-radius:10px;overflow:hidden;background:linear-gradient(135deg,#c7d9ed,#ecdfce)}
+.deco-preview.circle{aspect-ratio:1;width:190px;background:transparent}
+.deco-preview .sample-person{position:absolute;inset:0;width:100%;height:100%}
+.deco-preview.circle .sample-person{border-radius:50%;background:#e4ecf5}
+.deco-preview-label{text-align:center;font-size:12px;color:#667085;margin:5px 0}
+.deco-presets{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:7px;margin:12px 0}
+.deco-preset{padding:5px 2px;font-size:12px;min-width:0}
+.deco-preset[aria-pressed=true]{background:#eff5ff;border-color:#2463dc;box-shadow:0 0 0 1px #2463dc}
+.deco-preset>svg{display:block;width:100%;height:55px}
+.deco-settings-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px 18px}
+.deco-settings-grid select{padding:7px}
+.deco-settings-grid[hidden]{display:none!important}
+.deco-status{font-size:13px;color:#52657e;min-height:18px;overflow-wrap:anywhere}
+.deco-help{border:1px solid #c9d8eb;border-radius:10px;padding:12px;margin-top:12px;background:#f7faff;font-size:13px;line-height:1.65}
+.deco-help summary{font-weight:700;color:#174ea6;cursor:pointer}
+.deco-help table{width:100%;border-collapse:collapse;margin:10px 0}
+.deco-help th,.deco-help td{text-align:left;vertical-align:top;border-bottom:1px solid #dfe5ee;padding:6px}
+.deco-help ol{padding-left:22px}
+.deco-help p:last-child{margin-bottom:0}
