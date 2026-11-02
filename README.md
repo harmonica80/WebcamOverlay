@@ -2,9 +2,9 @@
 
 免安裝、可攜式的 Windows 雙攝影機浮動顯示工具。解壓縮後即可執行，不需要安裝驅動程式或背景服務。
 
-## v0.2.42 創用 CC 授權說明
+## v0.2.43 創用 CC 授權說明
 
-設定視窗底部新增創用 CC 授權資訊，連結至「姓名標示－非商業性－相同方式分享 4.0 國際」（CC BY-NC-SA 4.0）。
+設定視窗底部新增創用 CC 授權資訊，文字改為「此應用程式」，連結至「姓名標示－非商業性－相同方式分享 4.0 國際」（CC BY-NC-SA 4.0）。
 
 [下載 v0.2.42 免安裝版（Windows EXE）](https://github.com/harmonica80/WebcamOverlay/releases/download/v0.2.42/WebcamOverlay-Portable-0.2.42.exe) · [版本說明與 SHA-256 校驗碼](https://github.com/harmonica80/WebcamOverlay/releases/tag/v0.2.42)
 
