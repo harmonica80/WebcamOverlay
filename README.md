@@ -2,21 +2,13 @@
 
 免安裝、可攜式的 Windows 雙攝影機浮動顯示工具。解壓縮後即可執行，不需要安裝驅動程式或背景服務。
 
+## v0.2.42 創用 CC 授權說明
+
+設定視窗底部新增創用 CC 授權資訊，連結至「姓名標示－非商業性－相同方式分享 4.0 國際」（CC BY-NC-SA 4.0）。
+
+[下載 v0.2.42 免安裝版（Windows EXE）](https://github.com/harmonica80/WebcamOverlay/releases/download/v0.2.42/WebcamOverlay-Portable-0.2.42.exe) · [版本說明與 SHA-256 校驗碼](https://github.com/harmonica80/WebcamOverlay/releases/tag/v0.2.42)
+
 ## v0.2.41 節慶裝飾與三款插畫場景
-
-依已確認的構想圖重製新年燈籠、中秋月兔與畢業星光。三款採透明插畫分層，分別加入燈籠輕擺／紅包與煙花、流雲／桂花與月兔、學士帽／紙飛機與彩紙；同時更新自由貼圖。保留原有大小、靜態模式、框線及每台分別設定。其他七款維持 v0.2.40 效果。
-
-此公開版本同時包含 v0.2.38–v0.2.40 的攝影機恢復機制、10 款靜態／動態主題、自訂 PNG／APNG、圖案大小調整及自製圖檔教學。
-
-[下載 v0.2.41 免安裝版（Windows EXE）](https://github.com/harmonica80/WebcamOverlay/releases/download/v0.2.41/WebcamOverlay-Portable-0.2.41.exe) · [版本說明與 SHA-256 校驗碼](https://github.com/harmonica80/WebcamOverlay/releases/tag/v0.2.41)
-
-更新時先關閉舊版，再將新版 EXE 放在原本的資料夾，保留旁邊的 `Data` 資料夾。只有勾選「記錄設定，下次啟動時自動套用」的設定會在重新啟動後還原。
-
-![三款插畫場景預覽](docs/decoration-rich-v0.2.41.png)
-
-[實際動畫預覽](docs/decoration-rich-preview-v0.2.41.html) · [驗證紀錄](docs/decoration-v0.2.41-validation.md)
-
-## v0.2.40 活潑場景與自由貼圖（本機版本）
 
 - 10 款主題改為無框、不對稱、大小錯落的場景；櫻花向下飄落、氣球向上飄、蝙蝠橫飛，搭配雪花、愛心、彩紙及閃爍星光。
 - 新增「場景圖案大小」50–180% 與可選的細框線；框線預設關閉。

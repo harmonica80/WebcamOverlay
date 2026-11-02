@@ -5,3 +5,5 @@
 .resetArea{display:flex;flex-direction:column;align-items:center;gap:8px;margin-top:14px;padding-top:16px;border-top:1px solid #dfe5ee}.resetArea p{margin:0;color:#667085;font-size:13px}.resetArea button{color:#b42318;border-color:#e4aaa5;background:#fff}.resetArea button:hover{background:#fff1f0}.resetArea button:disabled{cursor:wait;opacity:.65}.resetArea #resetStatus{min-height:18px;color:#52657e;font-size:13px}
 
 .rememberSettings{display:flex;align-items:center;gap:8px;cursor:pointer}.rememberSettings input{width:16px;height:16px;margin:0;accent-color:#2463dc}
+
+.licenseNotice{margin:8px 0 16px;text-align:center;color:#667085;font-size:13px}.licenseNotice a{color:#2463dc;font-weight:600}.licenseNotice a:hover{text-decoration:underline}
