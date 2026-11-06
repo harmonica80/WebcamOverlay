@@ -23,6 +23,8 @@ let segmentationTimer;
 let configuredModel;
 let segmentationImage;
 let matteSignature = '';
+let virtualBackground = null;
+function loadVirtualBackground(name){const image=new Image();image.dataset.name=name;image.src=name.startsWith('data:image/')?name:`assets/virtual-backgrounds/${name}.png`;virtualBackground=image;}
 let matteRefiner;
 let maskSurface, imageSurface, refinedSurface;
 function resetMatte() { segmentationEpoch++; matteRefiner?.reset(); }
@@ -74,7 +76,7 @@ function stopSource(){
 }
 function applyOptions(next) {
   matteStatus.style.display='none';
-  const signature = JSON.stringify([next.video?.background, next.video?.matteQuality, next.video?.matteEdge, next.video?.matteFeather, next.video?.matteStability]);
+  const signature = JSON.stringify([next.video?.background,next.video?.backgroundImage, next.video?.matteQuality, next.video?.matteEdge, next.video?.matteFeather, next.video?.matteStability]);
   if (signature !== matteSignature) { resetMatte(); matteSignature = signature; advancedFailed = false; }
   options = next;
   const a=options.appearance||{}, v=options.video||{};
@@ -84,7 +86,8 @@ function applyOptions(next) {
   frame.style.clipPath=a.shape==='circle'?'circle(50% at 50% 50%)':'none';
   shell.style.filter=a.shadow?'drop-shadow(0 5px 7px #0006)':'none';
   shell.style.inset=a.shadow?'14px':'2px';
-  frame.style.background=v.background==='remove'?'transparent':'#111';
+  frame.style.background=['remove','virtual'].includes(v.background)?'transparent':'#111';
+  if(v.background==='virtual' && v.virtualType!=='solid' && (!virtualBackground || virtualBackground.dataset?.name!==(v.virtualType==='custom'?v.backgroundData:v.backgroundImage))){loadVirtualBackground(v.virtualType==='custom'?v.backgroundData:(v.virtualType==='solid'?'':v.backgroundImage));}
   video.style.transform=v.mirror?'scaleX(-1)':'none'; canvas.style.transform=v.mirror?'scaleX(-1)':'none';
   // Adjust the displayed image after segmentation to preserve mask alpha.
   const adjustment=(key,fallback,min,max)=>Number.isFinite(v[key])?Math.max(min,Math.min(max,v[key])):fallback;
@@ -177,9 +180,11 @@ function drawResult(result){
   if(result.advanced)context.drawImage(mask,0,0,canvas.width,canvas.height);else drawCover(mask);
   context.globalCompositeOperation='source-in';drawCover(result.image);
   if(mode==='blur'){
-    context.globalCompositeOperation='destination-over';context.filter=`blur(${options.video.blur||14}px)`;
-    drawCover(result.image,20);context.filter='none';
+    context.globalCompositeOperation='destination-over';context.filter='none';drawCover(result.image,20);context.filter=`blur(${options.video.blur||14}px)`;drawCover(result.image,20);context.filter='none';
+  } else if(mode==='virtual'){
+    context.globalCompositeOperation='destination-over';context.filter='none';if(options.video?.virtualType==='solid'){context.fillStyle=options.video.backgroundColor||'#7bb7e8';context.fillRect(0,0,canvas.width,canvas.height);}else if(virtualBackground?.complete && virtualBackground.naturalWidth>0)drawContain(virtualBackground);else{context.fillStyle='#9bc7e8';context.fillRect(0,0,canvas.width,canvas.height);}
   }
+  
   context.restore();
   message.style.display='none';
   matteStatus.textContent='進階去背無法使用，已改用品質模式。';
@@ -236,4 +241,11 @@ addEventListener('blur', () => { if (down) window.desktop.dragEnd(index); down=n
 
 if (window.desktop.reportOverlayHealth) {
   setInterval(() => window.desktop.reportOverlayHealth({ visible: overlayVisible, readyState: video.readyState, paused: video.paused, streamActive: !!stream?.active }), 2000);
+}
+
+function drawContain(image){
+  const iw=image.naturalWidth||image.videoWidth||image.width, ih=image.naturalHeight||image.videoHeight||image.height;
+  if(!iw||!ih)return;
+  const scale=Math.min(canvas.width/iw,canvas.height/ih),w=iw*scale,h=ih*scale;
+  context.drawImage(image,(canvas.width-w)/2,(canvas.height-h)/2,w,h);
 }

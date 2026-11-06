@@ -2,11 +2,15 @@
 
 免安裝、可攜式的 Windows 雙攝影機浮動顯示工具。解壓縮後即可執行，不需要安裝驅動程式或背景服務。
 
+## v0.2.44 五款真實照片背景
+
+虛擬背景的五個內建情境改為照片：明亮教室、溫馨書房、海景、櫻花庭園及柔和攝影棚。背景照片完整縮放顯示；原有純色與自訂圖片選項保留。
+
+[下載 v0.2.44 免安裝版（Windows EXE）](https://github.com/harmonica80/WebcamOverlay/releases/download/v0.2.44/WebcamOverlay-Portable-0.2.44.exe) · [版本說明與 SHA-256 校驗碼](https://github.com/harmonica80/WebcamOverlay/releases/tag/v0.2.44)
+
+關閉舊版後，將新版 EXE 放在原資料夾執行，並保留旁邊的 Data 資料夾。
+
 ## v0.2.43 創用 CC 授權說明
-
-設定視窗底部新增創用 CC 授權資訊，文字改為「此應用程式」，連結至「姓名標示－非商業性－相同方式分享 4.0 國際」（CC BY-NC-SA 4.0）。
-
-[下載 v0.2.42 免安裝版（Windows EXE）](https://github.com/harmonica80/WebcamOverlay/releases/download/v0.2.42/WebcamOverlay-Portable-0.2.42.exe) · [版本說明與 SHA-256 校驗碼](https://github.com/harmonica80/WebcamOverlay/releases/tag/v0.2.42)
 
 ## v0.2.41 節慶裝飾與三款插畫場景
 
