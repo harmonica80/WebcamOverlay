@@ -32,13 +32,16 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci
+      - name: Clean previous portable EXEs
+        shell: pwsh
+        run: Remove-Item release/WebcamOverlay-Portable-*.exe -Force -ErrorAction SilentlyContinue
       - name: Build Windows portable EXE
         run: npm run build:portable
-      - name: Upload test EXE
+      - name: Upload Windows portable EXE
         uses: actions/upload-artifact@v4
         with:
-          name: WebcamOverlay-Portable-test
-          path: release/WebcamOverlay-Portable-0.2.44.exe
+          name: WebcamOverlay-Portable-0.2.45-candidate
+          path: release/WebcamOverlay-Portable-*.exe
           if-no-files-found: error
           retention-days: 7
 
