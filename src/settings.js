@@ -4,7 +4,7 @@ const status = document.getElementById('status');
 let state;
 let appearanceTarget = 'all';
 let detectedDevices = [];
-const resolutionCandidates = [[3840,2160],[2560,1440],[2048,1536],[1920,1080],[1600,1200],[1600,900],[1280,960],[1280,720],[1024,768],[960,540],[800,600],[640,480],[640,360],[320,240]];
+const resolutionCandidates = [[3840,2160],[2560,1440],[1920,1080],[1600,1200],[1600,900],[1280,960],[1280,720],[960,540],[800,600],[640,480],[640,360],[320,240]];
 const resolutionProbeTokens = [0, 0];
 function setResolutionOptions(index, values, selected='auto', hint='') {
   const select=resolutionSelects[index];
@@ -21,26 +21,25 @@ async function detectResolutions(index, deviceId, preferred='auto') {
   setResolutionOptions(index,[],'auto','正在偵測此攝影機支援的常見解析度…');
   let supported=[];
   let capability=null;
+  let probe;
   try {
-    const probe=await navigator.mediaDevices.getUserMedia({video:{deviceId:{exact:deviceId},width:{ideal:1280},height:{ideal:720}},audio:false});
+    probe=await navigator.mediaDevices.getUserMedia({video:{deviceId:{exact:deviceId},width:{ideal:1280},height:{ideal:720}},audio:false});
     const track=probe.getVideoTracks()[0];
     capability=track.getCapabilities?.()||null;
     const current=track.getSettings?.();
     if(current?.width&&current?.height)supported.push({width:current.width,height:current.height});
-    probe.getTracks().forEach(item=>item.stop());
+    for(const [width,height] of resolutionCandidates){
+      if(token!==resolutionProbeTokens[index])return;
+      if(capability?.width&&(width<capability.width.min||width>capability.width.max))continue;
+      if(capability?.height&&(height<capability.height.min||height>capability.height.max))continue;
+      try{
+        await track.applyConstraints({width:{exact:width},height:{exact:height}});
+        const actual=track.getSettings?.();
+        if(actual?.width===width&&actual?.height===height)supported.push({width,height});
+      }catch{}
+    }
   } catch(error) { console.warn('Unable to inspect camera capabilities',error); }
-  for(const [width,height] of resolutionCandidates){
-    if(token!==resolutionProbeTokens[index])return;
-    if(capability?.width&&(width<capability.width.min||width>capability.width.max))continue;
-    if(capability?.height&&(height<capability.height.min||height>capability.height.max))continue;
-    let probe;
-    try{
-      probe=await navigator.mediaDevices.getUserMedia({video:{deviceId:{exact:deviceId},width:{exact:width},height:{exact:height}},audio:false});
-      const actual=probe.getVideoTracks()[0]?.getSettings?.();
-      if(actual?.width===width&&actual?.height===height)supported.push({width,height});
-    }catch{}
-    finally{probe?.getTracks().forEach(item=>item.stop());}
-  }
+  finally{probe?.getTracks().forEach(item=>item.stop());}
   if(token!==resolutionProbeTokens[index])return;
   setResolutionOptions(index,supported,preferred,supported.length?'只列出已成功測試的常見解析度。無法偵測時仍可使用自動模式。':'未能列出可測解析度；仍可使用自動模式。');
 }
