@@ -206,7 +206,7 @@ function drawResult(result){
   if(mode==='blur'){
     const blurRadius=Math.max(1,(Number(options.video.blur)||14)*canvas.width/1280);
     const bleed=Math.ceil(blurRadius*2);
-    context.globalCompositeOperation='destination-over';context.filter='none';drawCover(result.image,bleed);context.filter=`blur(${blurRadius}px)`;drawCover(result.image,bleed);context.filter='none';
+    context.globalCompositeOperation='destination-over';context.filter=`blur(${blurRadius}px)`;drawCover(result.image,bleed);context.filter='none';
   } else if(mode==='virtual'){
     context.globalCompositeOperation='destination-over';context.filter='none';if(options.video?.virtualType==='solid'){context.fillStyle=options.video.backgroundColor||'#7bb7e8';context.fillRect(0,0,canvas.width,canvas.height);}else if(virtualBackground?.complete && virtualBackground.naturalWidth>0)drawContain(virtualBackground);else{context.fillStyle='#9bc7e8';context.fillRect(0,0,canvas.width,canvas.height);}
   }
