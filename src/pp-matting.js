@@ -25,11 +25,15 @@ class PPMatting {
     await this.initialize();
     const width = image.videoWidth || image.width, height = image.videoHeight || image.height;
     if (!width || !height) throw new Error('Camera frame not ready');
+    // Keep the render snapshot bounded for high-resolution cameras.
+    const scale = Math.min(1, 1280 / Math.max(width, height));
+    const outputWidth = Math.max(1, Math.round(width * scale));
+    const outputHeight = Math.max(1, Math.round(height * scale));
     // Capture once so the image and alpha belong to the same frame even during inference.
-    if (this.snapshot.width !== width || this.snapshot.height !== height) {
-      this.snapshot.width = width; this.snapshot.height = height;
+    if (this.snapshot.width !== outputWidth || this.snapshot.height !== outputHeight) {
+      this.snapshot.width = outputWidth; this.snapshot.height = outputHeight;
     }
-    this.snapshot.getContext('2d').drawImage(image, 0, 0, width, height);
+    this.snapshot.getContext('2d').drawImage(image, 0, 0, outputWidth, outputHeight);
     this.rgb.drawImage(this.snapshot, 0, 0, 512, 512);
     const rgba = this.rgb.getImageData(0, 0, 512, 512).data, count = 512 * 512;
     for (let i = 0; i < count; i++) for (let c = 0; c < 3; c++) this.data[c * count + i] = rgba[i * 4 + c] / 127.5 - 1;
@@ -55,3 +59,4 @@ class PPMatting {
     this.session = null; this.ready = null;
   }
 }
+

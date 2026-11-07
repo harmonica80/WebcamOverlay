@@ -28,6 +28,7 @@ const defaults = {
   rememberSettings: false,
   sources: ['', ''],
   sourceNames: ['攝影機 1', '攝影機 2'],
+  sourceResolutions: ['auto', 'auto'],
   displayMode: 0,
   activeSingleSource: 0,
   overlayBounds: [
@@ -35,7 +36,7 @@ const defaults = {
     { width: 420, height: 236 }
   ],
   appearance: { shape: 'rounded', borderColor: '#ffffff', borderWidth: 5, radius: 20, shadow: true },
-  video: { brightness: 100, contrast: 100, saturation: 100, hue: 0, background: 'original', matteQuality: 'quality', matteEdge: 15, matteFeather: 25, matteStability: 40, blur: 14, mirror: false, fit: 'cover' },
+  video: { brightness: 100, contrast: 100, saturation: 100, hue: 0, background: 'original', backgroundImage: 'classroom', virtualType:'scene', backgroundColor:'#7bb7e8', backgroundData:'', matteQuality: 'quality', matteEdge: 15, matteFeather: 25, matteStability: 40, blur: 14, mirror: false, fit: 'cover' },
   sourceOptions: [],
   decorations: [{ enabled: false }, { enabled: false }],
   quickPanel: { bounds: { width: QUICK_PANEL_WIDTH, height: QUICK_PANEL_SINGLE_HEIGHT }, alwaysOnTop: true, mode: 'single', sourceIndex: 0, collapsed: false },
@@ -71,6 +72,7 @@ function loadConfig() {
       for (const key of Object.keys(saved.hotkeys)) saved.hotkeys[key] = saved.hotkeys[key].replace(/CommandOrControl/gi, 'Ctrl');
     }
     const merged = { ...defaults, ...saved, appearance: { ...defaults.appearance, ...saved.appearance }, video: { ...defaults.video, ...saved.video }, hotkeys: { ...defaults.hotkeys, ...saved.hotkeys } };
+    merged.sourceResolutions = [0, 1].map(index => saved.sourceResolutions?.[index] || 'auto');
     merged.sourceOptions = [0, 1].map(index => ({
       appearance: { ...merged.appearance, ...(saved.sourceOptions?.[index]?.appearance || {}) },
       video: { ...merged.video, ...(saved.sourceOptions?.[index]?.video || {}) }
@@ -489,7 +491,8 @@ function refreshOverlays() {
       const sourceIndex = sourceForOverlay(index);
       win.webContents.send('source-changed', {
         deviceId: config.sources[sourceIndex] || '',
-        name: config.sourceNames[sourceIndex] || `攝影機 ${sourceIndex + 1}`
+        name: config.sourceNames[sourceIndex] || `攝影機 ${sourceIndex + 1}`,
+        resolution: config.sourceResolutions?.[sourceIndex] || 'auto'
       });
       win.webContents.send('options-changed', optionsForSource(sourceIndex));
       win.webContents.send('visibility-changed', true);
@@ -752,6 +755,7 @@ ipcMain.on('set-quick-panel-top', (_e, enabled) => {
 ipcMain.on('save-sources', (_e, data) => {
   config.sources = data.sources;
   config.sourceNames = data.sourceNames;
+  config.sourceResolutions = [0, 1].map(index => data.resolutions?.[index] || 'auto');
   refreshOverlays();
 });
 ipcMain.on('save-options', (_e, data) => {
@@ -864,3 +868,4 @@ ipcMain.on('resize-overlay', (_e, { index, delta }) => {
     }
   }, 16);
 });
+
