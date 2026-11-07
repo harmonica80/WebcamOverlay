@@ -38,7 +38,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: WebcamOverlay-Portable-test
-          path: release/WebcamOverlay-Portable-*.exe
+          path: release/WebcamOverlay-Portable-0.2.44.exe
           if-no-files-found: error
           retention-days: 7
 
