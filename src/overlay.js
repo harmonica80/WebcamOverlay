@@ -24,7 +24,7 @@ let configuredModel;
 let segmentationImage;
 let matteSignature = '';
 let virtualBackground = null;
-function loadVirtualBackground(name){const image=new Image();image.dataset.name=name;image.src=name.startsWith('data:image/')?name:`assets/virtual-backgrounds/${name}.webp`;virtualBackground=image;}
+function loadVirtualBackground(name){const image=new Image();image.dataset.name=name;if(name.startsWith('data:image/'))image.src=name;else{image.onerror=()=>{image.onerror=null;image.src=`assets/virtual-backgrounds/${name}.png`;};image.src=`assets/virtual-backgrounds/${name}.webp`;}virtualBackground=image;}
 let matteRefiner;
 let maskSurface, imageSurface, refinedSurface;
 function resetMatte() { segmentationEpoch++; matteRefiner?.reset(); }
@@ -149,11 +149,14 @@ async function processFrame(){
     segmentationJob={epoch};
     let image=video;
     if(video.videoWidth){
+      const sourceScale=Math.min(1,1280/Math.max(video.videoWidth,video.videoHeight));
+      const sourceWidth=Math.max(1,Math.round(video.videoWidth*sourceScale));
+      const sourceHeight=Math.max(1,Math.round(video.videoHeight*sourceScale));
       segmentationImage ||= document.createElement('canvas');
-      if(segmentationImage.width!==video.videoWidth || segmentationImage.height!==video.videoHeight){
-        segmentationImage.width=video.videoWidth;segmentationImage.height=video.videoHeight;
+      if(segmentationImage.width!==sourceWidth || segmentationImage.height!==sourceHeight){
+        segmentationImage.width=sourceWidth;segmentationImage.height=sourceHeight;
       }
-      segmentationImage.getContext('2d').drawImage(video,0,0);
+      segmentationImage.getContext('2d').drawImage(video,0,0,sourceWidth,sourceHeight);
       image=segmentationImage;
     }
     await segmenter.send({image});
@@ -183,9 +186,17 @@ function refineMask(result) {
   pixels.data.set(matteRefiner.refine(pixels.data,rgb.data,width,height,{edge:v.matteEdge,feather:v.matteFeather,stability:v.matteStability}));
   rc.putImageData(pixels,0,0);return refinedSurface;
 }
+function outputCanvasSize(){
+  const width=video.videoWidth,height=video.videoHeight;
+  if(!width||!height)return {width:0,height:0};
+  const displayWidth=Math.max(1,frame.clientWidth||width);
+  const scale=Math.min(1,1920/Math.max(width,height),(displayWidth*2)/width);
+  return {width:Math.max(1,Math.round(width*scale)),height:Math.max(1,Math.round(height*scale))};
+}
 function drawResult(result){
   if(!video.videoWidth)return;
-  if(canvas.width!==video.videoWidth||canvas.height!==video.videoHeight){canvas.width=video.videoWidth;canvas.height=video.videoHeight;}
+  const outputSize=outputCanvasSize();
+  if(canvas.width!==outputSize.width||canvas.height!==outputSize.height){canvas.width=outputSize.width;canvas.height=outputSize.height;}
   const mode=options.video?.background;
   const mask=result.advanced||options.video?.matteQuality==='fast'?result.segmentationMask:refineMask(result);
   context.save();context.clearRect(0,0,canvas.width,canvas.height);
@@ -193,7 +204,9 @@ function drawResult(result){
   if(result.advanced)context.drawImage(mask,0,0,canvas.width,canvas.height);else drawCover(mask);
   context.globalCompositeOperation='source-in';drawCover(result.image);
   if(mode==='blur'){
-    context.globalCompositeOperation='destination-over';context.filter='none';drawCover(result.image,20);context.filter=`blur(${options.video.blur||14}px)`;drawCover(result.image,20);context.filter='none';
+    const blurRadius=Math.max(1,(Number(options.video.blur)||14)*canvas.width/1280);
+    const bleed=Math.ceil(blurRadius*2);
+    context.globalCompositeOperation='destination-over';context.filter='none';drawCover(result.image,bleed);context.filter=`blur(${blurRadius}px)`;drawCover(result.image,bleed);context.filter='none';
   } else if(mode==='virtual'){
     context.globalCompositeOperation='destination-over';context.filter='none';if(options.video?.virtualType==='solid'){context.fillStyle=options.video.backgroundColor||'#7bb7e8';context.fillRect(0,0,canvas.width,canvas.height);}else if(virtualBackground?.complete && virtualBackground.naturalWidth>0)drawContain(virtualBackground);else{context.fillStyle='#9bc7e8';context.fillRect(0,0,canvas.width,canvas.height);}
   }
