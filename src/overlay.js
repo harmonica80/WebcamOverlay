@@ -24,7 +24,7 @@ let configuredModel;
 let segmentationImage;
 let matteSignature = '';
 let virtualBackground = null;
-function loadVirtualBackground(name){const image=new Image();image.dataset.name=name;image.src=name.startsWith('data:image/')?name:`assets/virtual-backgrounds/${name}.png`;virtualBackground=image;}
+function loadVirtualBackground(name){const image=new Image();image.dataset.name=name;image.src=name.startsWith('data:image/')?name:`assets/virtual-backgrounds/${name}.webp`;virtualBackground=image;}
 let matteRefiner;
 let maskSurface, imageSurface, refinedSurface;
 function resetMatte() { segmentationEpoch++; matteRefiner?.reset(); }
@@ -34,11 +34,11 @@ let retryTimer;
 let down;
 let dragged = false;
 let overlayVisible = false;
-let selectedSource = { deviceId: '', name: '' };
+let selectedSource = { deviceId: '', name: '', resolution: 'auto' };
 let sourceGeneration = 0;
 
-async function useSource({ deviceId, name }) {
-  selectedSource = { deviceId, name };
+async function useSource({ deviceId, name, resolution = 'auto' }) {
+  selectedSource = { deviceId, name, resolution };
   stopSource();
   if (!overlayVisible) return;
   const generation = sourceGeneration;
@@ -47,8 +47,15 @@ async function useSource({ deviceId, name }) {
   message.style.display = 'grid';
   if (!deviceId) { message.textContent = '尚未選擇攝影機'; return; }
   message.textContent = `正在連接 ${name}…`;
+  const dimensions = /^\d+x\d+$/.test(resolution) ? resolution.split('x').map(Number) : null;
   try {
-    acquiredStream = await navigator.mediaDevices.getUserMedia({ video: { deviceId: { exact: deviceId }, width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } }, audio: false });
+    const videoConstraints = {
+      deviceId: { exact: deviceId },
+      width: dimensions ? { exact: dimensions[0] } : { ideal: 1280 },
+      height: dimensions ? { exact: dimensions[1] } : { ideal: 720 },
+      frameRate: { ideal: 30 }
+    };
+    acquiredStream = await navigator.mediaDevices.getUserMedia({ video: videoConstraints, audio: false });
     if (!isCurrent()) { acquiredStream.getTracks().forEach(track => track.stop()); return; }
     stream = acquiredStream;
     stream.getVideoTracks().forEach(track => track.addEventListener('ended', () => {
@@ -61,6 +68,12 @@ async function useSource({ deviceId, name }) {
   } catch (error) {
     if (!isCurrent()) return;
     if (acquiredStream) acquiredStream.getTracks().forEach(track => track.stop());
+    if (dimensions && ['OverconstrainedError','ConstraintNotSatisfiedError'].includes(error.name)) {
+      message.textContent = `${name}\n無法使用 ${resolution}，改用自動解析度`;
+      selectedSource = { deviceId, name, resolution: 'auto' };
+      setTimeout(() => { if (isCurrent()) useSource(selectedSource); }, 500);
+      return;
+    }
     stream = null; video.srcObject = null;
     video.style.display = 'none'; canvas.style.display = 'none'; message.style.display = 'grid';
     message.textContent = `${name}\n無法開啟或裝置正被占用\n5 秒後自動重試`;
@@ -208,7 +221,7 @@ window.desktop.onVisibilityChanged(visible=>{const wasVisible=overlayVisible;ove
 window.desktop.getState().then(state => {
   const sourceIndex=state.displayMode===1?state.activeSingleSource:index;
   applyOptions({ ...(state.sourceOptions?.[sourceIndex] || state), decoration: state.decorations?.[sourceIndex] });
-  selectedSource={deviceId:state.sources[sourceIndex]||'',name:state.sourceNames[sourceIndex]||''};
+  selectedSource={deviceId:state.sources[sourceIndex]||'',name:state.sourceNames[sourceIndex]||'',resolution:state.sourceResolutions?.[sourceIndex]||'auto'};
   overlayVisible=state.displayMode===2||(state.displayMode===1&&index===0);
   decorationRenderer?.update(options.decoration, options.appearance?.shape, overlayVisible);
   if(overlayVisible)useSource(selectedSource);
@@ -249,3 +262,4 @@ function drawContain(image){
   const scale=Math.min(canvas.width/iw,canvas.height/ih),w=iw*scale,h=ih*scale;
   context.drawImage(image,(canvas.width-w)/2,(canvas.height-h)/2,w,h);
 }
+
