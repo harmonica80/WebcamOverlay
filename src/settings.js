@@ -1,8 +1,49 @@
 const selects = [document.getElementById('source1'), document.getElementById('source2')];
+const resolutionSelects = [document.getElementById('resolution1'), document.getElementById('resolution2')];
 const status = document.getElementById('status');
 let state;
 let appearanceTarget = 'all';
 let detectedDevices = [];
+const resolutionCandidates = [[3840,2160],[2560,1440],[2048,1536],[1920,1080],[1600,1200],[1600,900],[1280,960],[1280,720],[1024,768],[960,540],[800,600],[640,480],[640,360],[320,240]];
+const resolutionProbeTokens = [0, 0];
+function setResolutionOptions(index, values, selected='auto', hint='') {
+  const select=resolutionSelects[index];
+  select.replaceChildren(option('auto','自動（優先 1280 × 720）'));
+  [...new Map(values.map(size=>[`${size.width}x${size.height}`,size])).values()].sort((a,b)=>(b.width*b.height)-(a.width*a.height)).forEach(size=>select.append(option(`${size.width}x${size.height}`,`${size.width} × ${size.height}`)));
+  if(selected!=='auto'&&![...select.options].some(item=>item.value===selected))select.append(option(selected,`${selected.replace('x',' × ')}（目前設定）`));
+  select.value=selected;
+  select.disabled=!selects[index].value;
+  document.getElementById(`resolutionHint${index+1}`).textContent=hint;
+}
+async function detectResolutions(index, deviceId, preferred='auto') {
+  const token=++resolutionProbeTokens[index];
+  if(!deviceId){setResolutionOptions(index,[],'auto','選擇攝影機後偵測解析度。');return;}
+  setResolutionOptions(index,[],'auto','正在偵測此攝影機支援的常見解析度…');
+  let supported=[];
+  let capability=null;
+  try {
+    const probe=await navigator.mediaDevices.getUserMedia({video:{deviceId:{exact:deviceId},width:{ideal:1280},height:{ideal:720}},audio:false});
+    const track=probe.getVideoTracks()[0];
+    capability=track.getCapabilities?.()||null;
+    const current=track.getSettings?.();
+    if(current?.width&&current?.height)supported.push({width:current.width,height:current.height});
+    probe.getTracks().forEach(item=>item.stop());
+  } catch(error) { console.warn('Unable to inspect camera capabilities',error); }
+  for(const [width,height] of resolutionCandidates){
+    if(token!==resolutionProbeTokens[index])return;
+    if(capability?.width&&(width<capability.width.min||width>capability.width.max))continue;
+    if(capability?.height&&(height<capability.height.min||height>capability.height.max))continue;
+    let probe;
+    try{
+      probe=await navigator.mediaDevices.getUserMedia({video:{deviceId:{exact:deviceId},width:{exact:width},height:{exact:height}},audio:false});
+      const actual=probe.getVideoTracks()[0]?.getSettings?.();
+      if(actual?.width===width&&actual?.height===height)supported.push({width,height});
+    }catch{}
+    finally{probe?.getTracks().forEach(item=>item.stop());}
+  }
+  if(token!==resolutionProbeTokens[index])return;
+  setResolutionOptions(index,supported,preferred,supported.length?'只列出已成功測試的常見解析度。無法偵測時仍可使用自動模式。':'未能列出可測解析度；仍可使用自動模式。');
+}
 function arrangeSectionOrder(){
   const quickPosition=document.querySelector('.quickPosition');
   const appearance=[...document.querySelectorAll('main > section')].find(section=>section.querySelector(':scope > h2')?.textContent==='畫面與背景');
@@ -90,6 +131,7 @@ function fillSourceSelects(devices) {
       select.append(option(wanted,state?.sourceNames?.[i]||`原有攝影機 ${i+1}`));
     }
     select.value=wanted;
+    if(resolutionSelects[i])resolutionSelects[i].disabled=!wanted;
   });
 }
 async function videoInputs(){
@@ -107,12 +149,14 @@ async function detect() {
     }
     fillSourceSelects(devices);
     detectedDevices=devices;
+    selects.forEach((select,i)=>detectResolutions(i,select.value,state?.sourceResolutions?.[i]||'auto'));
     status.textContent=`找到 ${devices.length} 個攝影機來源。`;
   } catch(error) {
     console.error('Camera detection failed',error);
     try{devices=await videoInputs();}catch{}
     detectedDevices=devices;
     fillSourceSelects(devices);
+    selects.forEach((select,i)=>detectResolutions(i,select.value,state?.sourceResolutions?.[i]||'auto'));
     status.textContent=devices.length
       ?`找到 ${devices.length} 個攝影機來源。`
       :state?.sources?.some(Boolean)
@@ -121,19 +165,27 @@ async function detect() {
   }
 }
 function paintMode(mode){document.querySelectorAll('[data-mode]').forEach(b=>b.classList.toggle('active',Number(b.dataset.mode)===mode));}
-document.getElementById('detect').onclick=detect;
+document.getElementById('detect').onclick=async()=>{await detect();selects.forEach((select,i)=>detectResolutions(i,select.value,state?.sourceResolutions?.[i]||'auto'));};
+selects.forEach((select,index)=>select.addEventListener('change',()=>detectResolutions(index,select.value,'auto')));
 document.getElementById('save').onclick=()=>{
   const sources=selects.map(s=>s.value), sourceNames=selects.map((s,i)=>s.selectedOptions[0]?.textContent||`攝影機 ${i+1}`);
   if(sources[0]&&sources[0]===sources[1]){status.textContent='來源 1 與來源 2 請選擇不同的攝影機。';return;}
-  window.desktop.saveSources({sources,sourceNames}); status.textContent='來源設定已套用。';
+  const resolutions=resolutionSelects.map((s,i)=>sources[i]?s.value:'auto');
+  window.desktop.saveSources({sources,sourceNames,resolutions}); status.textContent='來源與解析度設定已套用。';
 };
 document.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>window.desktop.setMode(Number(b.dataset.mode)));
 window.desktop.onStateChanged(s=>{state=s;paintRememberSettings(s);paintMode(s.displayMode);});
 const imageDefaults={brightness:100,contrast:100,saturation:100,hue:0};
-const controls=[...Object.keys(imageDefaults),'shape','background','borderColor','borderWidth','radius','blur','mirror','shadow','matteQuality','matteEdge','matteFeather','matteStability'];
+const controls=[...Object.keys(imageDefaults),'shape','background','borderColor','borderWidth','radius','blur','mirror','shadow','backgroundImage','virtualType','backgroundColor','matteQuality','matteEdge','matteFeather','matteStability'];
 function updateMatteControls(){
   const original=document.getElementById('background').value==='original';
   document.getElementById('matteQuality').disabled=original;
+  const active=document.getElementById('background').value==='virtual';
+  document.getElementById('virtualBackgroundRow').hidden=!active;
+  const type=document.getElementById('virtualType').value;
+  document.getElementById('sceneBackgroundRow').hidden=!active||type!=='scene';
+  document.getElementById('solidBackgroundRow').hidden=!active||type!=='solid';
+  document.getElementById('customBackgroundRow').hidden=!active||type!=='custom';
   const disabled=original||document.getElementById('matteQuality').value!=='quality';
   ['matteEdge','matteFeather','matteStability'].forEach(id=>document.getElementById(id).disabled=disabled);
 }
@@ -153,7 +205,7 @@ function fillOptions(s){
 }
 function sendOptions(){
   updateMatteControls();
-  window.desktop.saveOptions({target:appearanceTarget,appearance:{shape:document.getElementById('shape').value,borderColor:document.getElementById('borderColor').value,borderWidth:Number(document.getElementById('borderWidth').value),radius:Number(document.getElementById('radius').value),shadow:document.getElementById('shadow').checked},video:{...Object.fromEntries(Object.keys(imageDefaults).map(id=>[id,Number(document.getElementById(id).value)])),matteQuality:document.getElementById('matteQuality').value,matteEdge:Number(document.getElementById('matteEdge').value),matteFeather:Number(document.getElementById('matteFeather').value),matteStability:Number(document.getElementById('matteStability').value),background:document.getElementById('background').value,blur:Number(document.getElementById('blur').value),mirror:document.getElementById('mirror').checked}});
+  window.desktop.saveOptions({target:appearanceTarget,appearance:{shape:document.getElementById('shape').value,borderColor:document.getElementById('borderColor').value,borderWidth:Number(document.getElementById('borderWidth').value),radius:Number(document.getElementById('radius').value),shadow:document.getElementById('shadow').checked},video:{...Object.fromEntries(Object.keys(imageDefaults).map(id=>[id,Number(document.getElementById(id).value)])),matteQuality:document.getElementById('matteQuality').value,matteEdge:Number(document.getElementById('matteEdge').value),matteFeather:Number(document.getElementById('matteFeather').value),matteStability:Number(document.getElementById('matteStability').value),background:document.getElementById('background').value,backgroundImage:document.getElementById('backgroundImage').value,virtualType:document.getElementById('virtualType').value,backgroundColor:document.getElementById('backgroundColor').value,backgroundData:state?.sourceOptions?.[appearanceTarget==='1'?1:0]?.video?.backgroundData||'',blur:Number(document.getElementById('blur').value),mirror:document.getElementById('mirror').checked}});
 }
 document.querySelectorAll('[data-appearance-target]').forEach(button=>button.onclick=()=>{
   if(optionTimer){clearTimeout(optionTimer);optionTimer=null;sendOptions();}
@@ -233,6 +285,7 @@ resetButton.onclick=async()=>{
     paintMode(state.displayMode);
     fillOptions(state);
     fillSourceSelects(detectedDevices);
+    resolutionSelects.forEach((_,i)=>detectResolutions(i,'','auto'));
     status.textContent='攝影機來源已重設為不指定。';
     document.getElementById('hotkeyStatus').textContent='快速鍵已恢復為預設值。';
     resetStatus.textContent=result.message;
@@ -240,7 +293,7 @@ resetButton.onclick=async()=>{
     resetButton.disabled=false;
   }
 };
-window.desktop.getState().then(s=>{state=s;paintRememberSettings(s);paintMode(s.displayMode);fillOptions(s);fillSourceSelects([]);versionStatus.textContent=`目前版本 v${s.appVersion}`;detect();checkUpdates();});
+window.desktop.getState().then(s=>{state=s;paintRememberSettings(s);paintMode(s.displayMode);fillOptions(s);fillSourceSelects([]);resolutionSelects.forEach((_,i)=>setResolutionOptions(i,[],'auto','選擇攝影機後偵測解析度。'));versionStatus.textContent=`目前版本 v${s.appVersion}`;detect().then(()=>selects.forEach((select,i)=>detectResolutions(i,select.value,s.sourceResolutions?.[i]||'auto')));checkUpdates();});
 
 document.getElementById('restartOverlays').onclick=async()=>{
   const button=document.getElementById('restartOverlays');button.disabled=true;
@@ -249,3 +302,7 @@ document.getElementById('restartOverlays').onclick=async()=>{
   finally { setTimeout(()=>{button.disabled=false;},2000); }
 };
 document.getElementById('openDiagnostics').onclick=()=>window.desktop.openDiagnostics();
+
+document.getElementById('importBackground').onclick=()=>document.getElementById('backgroundFile').click();
+document.getElementById('backgroundFile').onchange=()=>{const file=document.getElementById('backgroundFile').files?.[0];if(!file)return;if(file.size>8*1024*1024){document.getElementById('customBackgroundName').textContent='圖片請小於 8 MB。';return;}const reader=new FileReader();reader.onload=()=>{document.getElementById('customBackgroundName').textContent=file.name;window.desktop.saveOptions({target:appearanceTarget,appearance:{},video:{backgroundData:reader.result,virtualType:'custom',background:'virtual'}});document.getElementById('background').value='virtual';document.getElementById('virtualType').value='custom';updateMatteControls();};reader.readAsDataURL(file);};
+
