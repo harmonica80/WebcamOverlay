@@ -36,14 +36,16 @@ const defaults = {
     { width: 420, height: 236 }
   ],
   appearance: { shape: 'rounded', borderColor: '#ffffff', borderWidth: 5, radius: 20, shadow: true },
-  video: { brightness: 100, contrast: 100, saturation: 100, hue: 0, background: 'original', backgroundImage: 'classroom', virtualType:'scene', backgroundColor:'#7bb7e8', backgroundData:'', matteQuality: 'quality', matteEdge: 15, matteFeather: 25, matteStability: 40, blur: 14, mirror: false, fit: 'cover' },
+  video: { brightness: 100, contrast: 100, saturation: 100, hue: 0, background: 'original', backgroundImage: 'classroom', virtualType:'scene', backgroundColor:'#7bb7e8', backgroundData:'', matteQuality: 'rvm', matteEdge: 15, matteFeather: 25, matteStability: 40, blur: 14, mirror: false, fit: 'cover' },
   sourceOptions: [],
   decorations: [{ enabled: false }, { enabled: false }],
   quickPanel: { bounds: { width: QUICK_PANEL_WIDTH, height: QUICK_PANEL_SINGLE_HEIGHT }, alwaysOnTop: true, mode: 'single', sourceIndex: 0, collapsed: false },
   hotkeys: { cycle: 'Ctrl+Alt+C', hide: 'Ctrl+Alt+0', one: 'Ctrl+Alt+1', two: 'Ctrl+Alt+2', swap: 'Ctrl+Alt+S' }
 };
 
+let cachedConfigPath;
 function configPath() {
+  if (cachedConfigPath) return cachedConfigPath;
   // electron-builder 的 portable 啟動器會把應用程式解壓到暫存目錄；
   // PORTABLE_EXECUTABLE_DIR 才是使用者實際存放 EXE 的固定位置。
   const portableDirectory = process.env.PORTABLE_EXECUTABLE_DIR;
@@ -54,10 +56,17 @@ function configPath() {
   try {
     fs.mkdirSync(local, { recursive: true });
     fs.accessSync(local, fs.constants.W_OK);
-    return path.join(local, 'settings.json');
+    return (cachedConfigPath = path.join(local, 'settings.json'));
   } catch {
-    return path.join(app.getPath('userData'), 'settings.json');
+    return (cachedConfigPath = path.join(app.getPath('userData'), 'settings.json'));
   }
+}
+
+// Write to a temporary file first so a crash or power loss cannot leave half a settings file.
+function writeFileAtomic(file, text) {
+  const temporary = file + '.tmp';
+  fs.writeFileSync(temporary, text);
+  fs.renameSync(temporary, file);
 }
 
 function loadConfig() {
@@ -104,7 +113,7 @@ function saveConfig() {
   config.activeSingleSource = activeSingleSource;
   config.overlayBounds = overlays.map((w, i) => w && !w.isDestroyed() ? w.getBounds() : config.overlayBounds[i]);
   if (quickPositionWindow && !quickPositionWindow.isDestroyed()) config.quickPanel.bounds = quickPositionWindow.getBounds();
-  fs.writeFileSync(configPath(), JSON.stringify(config.rememberSettings ? config : { rememberSettings: false }, null, 2));
+  writeFileAtomic(configPath(), JSON.stringify(config.rememberSettings ? config : { rememberSettings: false }, null, 2));
 }
 
 function scheduleSave() {
@@ -421,6 +430,24 @@ function createApplicationMenu() {
   ]));
 }
 
+// One swap routine for tray, hotkey and overlay click. A resolution belongs to its device,
+// so it travels with the device; per-window appearance stays with the window.
+function swapSources() {
+  if (displayMode === 1) activeSingleSource = 1 - activeSingleSource;
+  else if (displayMode === 2) for (const key of ['sources', 'sourceNames', 'sourceResolutions']) {
+    if (Array.isArray(config[key])) [config[key][0], config[key][1]] = [config[key][1], config[key][0]];
+  }
+  refreshOverlays();
+}
+
+function sendToOverlays(channel, dataForIndex) {
+  overlays.forEach((win, index) => { if (win && !win.isDestroyed()) win.webContents.send(channel, dataForIndex(index)); });
+}
+const isSettings = event => !!settingsWindow && !settingsWindow.isDestroyed() && event.sender === settingsWindow.webContents;
+const isQuickPanel = event => !!quickPositionWindow && !quickPositionWindow.isDestroyed() && event.sender === quickPositionWindow.webContents;
+const isOverlay = event => overlays.some(w => w && !w.isDestroyed() && w.webContents === event.sender);
+const isControlWindow = event => isSettings(event) || isQuickPanel(event);
+
 function sourceForOverlay(index) {
   if (displayMode === 1) return activeSingleSource;
   return index;
@@ -501,7 +528,7 @@ function refreshOverlays() {
   });
   raiseQuickPositionOnTop();
   settingsWindow?.webContents.send('state-changed', currentState());
-  saveConfig();
+  scheduleSave();
 }
 
 function createTray() {
@@ -515,7 +542,7 @@ function createTray() {
     { label: '隱藏', click: () => setMode(0) },
     { label: '顯示 1 個', click: () => setMode(1) },
     { label: '顯示 2 個', click: () => setMode(2) },
-    { label: '交換來源', click: () => { if (displayMode === 1) activeSingleSource = 1-activeSingleSource; else [config.sources[0],config.sources[1],config.sourceNames[0],config.sourceNames[1]]=[config.sources[1],config.sources[0],config.sourceNames[1],config.sourceNames[0]]; refreshOverlays(); } },
+    { label: '交換來源', click: swapSources },
     { type: 'separator' }, { label: '結束程式', click: () => { app.isQuiting = true; app.quit(); } }
   ]));
   tray.on('double-click', createSettings);
@@ -597,12 +624,7 @@ function registerHotkeys() {
   bind('hide', () => setMode(0));
   bind('one', () => setMode(1));
   bind('two', () => setMode(2));
-  bind('swap', () => {
-    if (displayMode === 1) activeSingleSource = 1 - activeSingleSource;
-    else if (displayMode === 2) [config.sources[0], config.sources[1], config.sourceNames[0], config.sourceNames[1]] =
-      [config.sources[1], config.sources[0], config.sourceNames[1], config.sourceNames[0]];
-    refreshOverlays();
-  });
+  bind('swap', swapSources);
   return results;
 }
 
@@ -648,6 +670,12 @@ app.on('second-instance', () => {
   settingsWindow?.focus();
 });
 
+const EXTERNAL_LINKS = /^https:\/\/(harmonica80\.blogspot\.com\/|github\.com\/harmonica80\/WebcamOverlay\/|creativecommons\.org\/licenses\/|www\.gnu\.org\/licenses\/)/;
+app.on('web-contents-created', (_event, contents) => {
+  contents.setWindowOpenHandler(({ url }) => { if (EXTERNAL_LINKS.test(url)) shell.openExternal(url); return { action: 'deny' }; });
+  contents.on('will-navigate', (event, url) => { if (!url.startsWith('file:')) event.preventDefault(); });
+});
+
 app.whenReady().then(() => {
   session.defaultSession.setPermissionCheckHandler((_wc, permission) => permission === 'media');
   session.defaultSession.setPermissionRequestHandler((_wc, permission, callback) => callback(permission === 'media'));
@@ -685,6 +713,14 @@ ipcMain.on('overlay-health', (event, data) => {
   const signature = JSON.stringify(status);
   if (signature !== health.signature) { health.signature = signature; diagnostic('video-state', { index, ...status }); }
 });
+// Matting engine status from overlays (no images, no device names): helps diagnose GPU-specific problems.
+ipcMain.on('overlay-matting', (event, data) => {
+  const index = overlays.findIndex(w => w && !w.isDestroyed() && w.webContents === event.sender);
+  if (index < 0 || !data || typeof data !== 'object') return;
+  const text = value => typeof value === 'string' ? value.slice(0, 200) : undefined;
+  const stats = data.stats && typeof data.stats === 'object' ? { nonFinite: Number(data.stats.nonFinite) || 0, alphaMean: Number(data.stats.alphaMean) || 0, width: Number(data.stats.width) || undefined, height: Number(data.stats.height) || undefined } : undefined;
+  diagnostic('matting', { index, event: text(data.event), mode: text(data.mode), backend: text(data.backend), model: text(data.model), compositor: text(data.compositor), reason: text(data.reason), stats });
+});
 ipcMain.handle('restart-overlays', event => {
   if (event.sender !== settingsWindow?.webContents) return { ok: false };
   [0, 1].forEach(index => { clearTimeout(overlayHealth[index].pending); overlayHealth[index].pending = null; requestOverlayRecovery(index, 'manual', true); });
@@ -704,7 +740,7 @@ ipcMain.handle('save-decoration', (event, data) => {
     ? patch(config.decorations?.[i], data.patch || {}) : patch(config.decorations?.[i], {}));
   try { saveConfig(); }
   catch { config.decorations = previous; return { ok: false, message: '無法儲存裝飾設定，請檢查資料夾權限。' }; }
-  overlays.forEach((win,index) => { if (win && !win.isDestroyed()) win.webContents.send('options-changed',optionsForSource(sourceForOverlay(index))); });
+  sendToOverlays('options-changed', index => optionsForSource(sourceForOverlay(index)));
   settingsWindow.webContents.send('state-changed',currentState());
   return { ok: true, state: currentState() };
 });
@@ -723,12 +759,13 @@ ipcMain.handle('load-decoration', async (event,id) => {
   catch { return {ok:false,message:'找不到圖檔或檔案已損壞，請重新匯入。'}; }
 });
 ipcMain.handle('open-external', (_e, url) => {
-  if (url === 'https://harmonica80.blogspot.com/' || /^https:\/\/github\.com\/harmonica80\/WebcamOverlay\/(?:raw|releases)\//.test(url)) return shell.openExternal(url);
+  if (typeof url === 'string' && EXTERNAL_LINKS.test(url)) return shell.openExternal(url);
 });
 ipcMain.handle('check-for-updates', () => checkForUpdates());
-ipcMain.on('set-mode', (_e, mode) => setMode(Number(mode)));
-ipcMain.on('position-overlay', (_e, data) => moveOverlayToGrid(Number(data.sourceIndex), String(data.position)));
-ipcMain.on('quick-position-single', (_e, data) => {
+ipcMain.on('set-mode', (event, mode) => { if (isControlWindow(event)) setMode(Number(mode)); });
+ipcMain.on('position-overlay', (event, data) => { if (isControlWindow(event) && data) moveOverlayToGrid(Number(data.sourceIndex), String(data.position)); });
+ipcMain.on('quick-position-single', (event, data) => {
+  if (!isControlWindow(event) || !data) return;
   const nextSource = Number(data.sourceIndex) === 1 ? 1 : 0;
   const sourceChanged = activeSingleSource !== nextSource;
   activeSingleSource = nextSource;
@@ -736,12 +773,13 @@ ipcMain.on('quick-position-single', (_e, data) => {
   else if (sourceChanged) refreshOverlays();
   setImmediate(() => moveOverlayToGrid(activeSingleSource, String(data.position)));
 });
-ipcMain.on('arrange-overlays', (_e, layout) => arrangeOverlays(String(layout)));
+ipcMain.on('arrange-overlays', (event, layout) => { if (isControlWindow(event)) arrangeOverlays(String(layout)); });
 ipcMain.on('open-quick-position', createQuickPositionWindow);
 ipcMain.on('open-settings', createSettings);
 ipcMain.on('close-quick-position', hideQuickPositionWindow);
 ipcMain.on('set-quick-panel-collapsed', (_e, collapsed) => setQuickPositionCollapsed(!!collapsed));
 ipcMain.on('save-quick-panel-state', (_e, data) => {
+  if (!data) return;
   config.quickPanel = { ...defaults.quickPanel, ...config.quickPanel, mode: data.mode === 'dual' ? 'dual' : 'single', sourceIndex: Number(data.sourceIndex) === 1 ? 1 : 0 };
   if (!config.quickPanel.collapsed) resizeQuickPositionWindow(config.quickPanel.mode === 'dual' ? QUICK_PANEL_DUAL_HEIGHT : QUICK_PANEL_SINGLE_HEIGHT);
   scheduleSave();
@@ -752,13 +790,15 @@ ipcMain.on('set-quick-panel-top', (_e, enabled) => {
   if (enabled) raiseQuickPositionOnTop();
   scheduleSave();
 });
-ipcMain.on('save-sources', (_e, data) => {
+ipcMain.on('save-sources', (event, data) => {
+  if (!isSettings(event) || !Array.isArray(data?.sources) || !Array.isArray(data?.sourceNames)) return;
   config.sources = data.sources;
   config.sourceNames = data.sourceNames;
   config.sourceResolutions = [0, 1].map(index => data.resolutions?.[index] || 'auto');
   refreshOverlays();
 });
-ipcMain.on('save-options', (_e, data) => {
+ipcMain.on('save-options', (event, data) => {
+  if (!isSettings(event) || !data) return;
   ensureSourceOptions();
   const target = data.target;
   if (target === 'all') {
@@ -774,11 +814,12 @@ ipcMain.on('save-options', (_e, data) => {
     };
   }
   applyShapeGeometry();
-  overlays.forEach((win, index) => win?.webContents.send('options-changed', optionsForSource(sourceForOverlay(index))));
+  sendToOverlays('options-changed', index => optionsForSource(sourceForOverlay(index)));
   settingsWindow?.webContents.send('state-changed', currentState());
   scheduleSave();
 });
-ipcMain.handle('save-hotkeys', (_e, hotkeys) => {
+ipcMain.handle('save-hotkeys', (event, hotkeys) => {
+  if (!isSettings(event) || !hotkeys || typeof hotkeys !== 'object') return { ok: false, message: '請從設定視窗修改快速鍵。' };
   const previous = config.hotkeys;
   config.hotkeys = { ...hotkeys };
   const results = registerHotkeys();
@@ -788,7 +829,8 @@ ipcMain.handle('save-hotkeys', (_e, hotkeys) => {
   }
   scheduleSave(); return { ok: true, message: '快速鍵已更新。' };
 });
-ipcMain.handle('set-remember-settings', (_event, enabled) => {
+ipcMain.handle('set-remember-settings', (event, enabled) => {
+  if (!isSettings(event)) return { ok: false, message: '請從設定視窗修改記錄選項。' };
   const previous = config.rememberSettings;
   config.rememberSettings = enabled === true;
   try {
@@ -800,25 +842,18 @@ ipcMain.handle('set-remember-settings', (_event, enabled) => {
     return { ok: false, message: '無法儲存記錄選項，請檢查資料夾寫入權限。' };
   }
 });
-ipcMain.handle('reset-settings', resetSettingsToDefaults);
-ipcMain.on('overlay-click', (_e, index) => {
-  if (displayMode === 1) activeSingleSource = 1 - activeSingleSource;
-  else if (displayMode === 2) {
-    [config.sources[0], config.sources[1]] = [config.sources[1], config.sources[0]];
-    [config.sourceNames[0], config.sourceNames[1]] = [config.sourceNames[1], config.sourceNames[0]];
-  }
-  refreshOverlays();
-});
-ipcMain.on('drag-start', (_e, { index, screenX, screenY }) => {
-  const win = overlays[index]; if (!win) return;
+ipcMain.handle('reset-settings', event => isSettings(event) ? resetSettingsToDefaults() : { ok: false });
+ipcMain.on('overlay-click', event => { if (isOverlay(event)) swapSources(); });
+ipcMain.on('drag-start', (event, { index }) => {
+  const win = overlays[index]; if (!win || win.isDestroyed() || win.webContents !== event.sender) return;
   const [x, y] = win.getPosition();
   const pointer = screen.getCursorScreenPoint();
   const size = overlaySizes.get(index) || win.getBounds();
   dragSessions.set(index, { pointerX: pointer.x, pointerY: pointer.y, windowX: x, windowY: y, ...size });
 });
-ipcMain.on('move-overlay', (_e, { index }) => {
+ipcMain.on('move-overlay', (event, { index }) => {
   const win = overlays[index], drag = dragSessions.get(index);
-  if (!win || !drag) return;
+  if (!win || !drag || win.isDestroyed() || win.webContents !== event.sender) return;
   const pointer = screen.getCursorScreenPoint();
   win.setBounds({
     x: Math.round(drag.windowX + pointer.x - drag.pointerX),
@@ -835,8 +870,8 @@ ipcMain.on('drag-end', (_e, index) => {
   }
   dragSessions.delete(index);
 });
-ipcMain.on('resize-overlay', (_e, { index, delta }) => {
-  const win = overlays[index]; if (!win) return;
+ipcMain.on('resize-overlay', (event, { index, delta }) => {
+  const win = overlays[index]; if (!win || win.isDestroyed() || win.webContents !== event.sender) return;
   const current = resizeAnimations.get(index) || {};
   const baseWidth = current.targetWidth || overlaySizes.get(index)?.width || win.getBounds().width;
   const normalizedDelta = Math.max(-120, Math.min(120, Number(delta) || 0));
@@ -868,4 +903,3 @@ ipcMain.on('resize-overlay', (_e, { index, delta }) => {
     }
   }, 16);
 });
-

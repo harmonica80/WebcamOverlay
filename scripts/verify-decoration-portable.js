@@ -28,7 +28,7 @@ async function screenshot(name){const r=await call('Page.captureScreenshot',{for
   await evaluate('document.querySelector(".decoration-settings").scrollIntoView({block:"start"})');await pause(300);await screenshot('settings.png');
   for(const id of ['newyear','moon','graduation']){
     await evaluate(`window.desktop.saveDecoration({target:'0',patch:{preset:'${id}',mode:'frame',enabled:true}})`);
-    assert.equal(await evaluate(`(async()=>{const i=new Image();i.src='assets/decorations/${id}-v041.png';await i.decode();return i.naturalWidth;})()`),1536);
+    assert.equal(await evaluate(`(async()=>{const i=new Image();i.src='assets/decorations/${id}-v041.webp';await i.decode();return i.naturalWidth;})()`),1536);
     assert.ok(await evaluate('document.querySelectorAll("#decoPreviewLayer .rich-sprite").length>10'));
     assert.equal(await evaluate('document.querySelector("#decoPreviewLayer .rich-scene").dataset.theme'),id);
     await pause(150);await screenshot(id+'-settings.png');

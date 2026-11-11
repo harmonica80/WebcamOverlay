@@ -1,15 +1,19 @@
 {
   "name": "webcam-overlay",
-  "version": "0.2.45",
+  "version": "0.3.2",
   "description": "Portable dual webcam overlay for Windows",
   "main": "src/main.js",
   "author": "Webcam Overlay",
-  "license": "MIT",
+  "license": "GPL-3.0-only",
   "scripts": {
     "start": "electron .",
-    "build:portable": "node scripts/sync-onnx-runtime.js && node scripts/generate-icons.js && electron-builder --win portable --x64"
+    "postinstall": "node scripts/sync-vendor.js && node scripts/fetch-models.js --optional",
+    "fetch-models": "node scripts/fetch-models.js",
+    "test": "node --test scripts/test-settings-persistence.js scripts/test-source-lifecycle.js scripts/test-matte-refiner.js scripts/test-overlay-recovery.js scripts/test-decoration.js scripts/test-main-helpers.js",
+    "build:portable": "node scripts/sync-vendor.js && node scripts/fetch-models.js && node scripts/generate-icons.js && electron-builder --win portable --x64"
   },
   "devDependencies": {
+    "@mediapipe/tasks-vision": "1.2.2",
     "electron": "^37.2.0",
     "electron-builder": "^26.0.12",
     "onnxruntime-web": "1.24.3"
@@ -22,9 +26,18 @@
     },
     "files": [
       "src/**/*",
-      "scripts/generate-icons.js",
+      "!src/**/*.svg",
+      "!src/vendor/rvm/rvm_mobilenetv3_fp*.onnx",
+      "src/assets/tray-icon.svg",
+      "LICENSE",
+      "THIRD_PARTY_NOTICES.md",
       "package.json"
     ],
+    "electronLanguages": [
+      "zh-TW",
+      "en-US"
+    ],
+    "compression": "maximum",
     "win": {
       "icon": "src/assets/app-icon.png",
       "target": [
@@ -34,8 +47,5 @@
     "portable": {
       "artifactName": "WebcamOverlay-Portable-${version}.exe"
     }
-  },
-  "dependencies": {
-    "@mediapipe/selfie_segmentation": "^0.1.1675465747"
   }
 }

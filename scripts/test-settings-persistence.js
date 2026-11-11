@@ -3,7 +3,7 @@ const {test}=require('node:test');
 const source=fs.readFileSync(require('node:path').join(__dirname,'../src/main.js'),'utf8');
 function setup(saved){
  let disk=saved===undefined?undefined:JSON.stringify(saved);
- const context=vm.createContext({require:n=>n==='electron'?{dialog:{},app:{commandLine:{appendSwitch(){}},isPackaged:true,getPath:()=>'/fallback'}}:n==='fs'?{constants:{W_OK:2},mkdirSync(){},accessSync(){},readFileSync(){if(disk===undefined)throw Error('missing');return disk;},writeFileSync(_p,value){disk=value;}}:require(n),process:{env:{PORTABLE_EXECUTABLE_DIR:'/portable'},execPath:'/temporary/app.exe'},__dirname:'/src',structuredClone,setTimeout,clearTimeout});
+ const context=vm.createContext({require:n=>n==='electron'?{dialog:{},app:{commandLine:{appendSwitch(){}},isPackaged:true,getPath:()=>'/fallback'}}:n==='fs'?{constants:{W_OK:2},mkdirSync(){},accessSync(){},readFileSync(){if(disk===undefined)throw Error('missing');return disk;},writeFileSync(_p,value){disk=value;},renameSync(){}}:require(n),process:{env:{PORTABLE_EXECUTABLE_DIR:'/portable'},execPath:'/temporary/app.exe'},__dirname:'/src',structuredClone,setTimeout,clearTimeout});
  vm.runInContext(source.slice(0,source.indexOf('function createOverlay(')),context);
  const run=code=>vm.runInContext(code,context);
  run('config=loadConfig(); displayMode=config.displayMode; activeSingleSource=config.activeSingleSource;');

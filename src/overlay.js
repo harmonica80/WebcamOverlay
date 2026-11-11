@@ -12,23 +12,41 @@ const decorationRenderer = window.Decorations?.createRenderer(document.getElemen
 });
 let stream;
 let options = { appearance: {}, video: { background: 'original' } };
-let segmenter;
-let advancedSegmenter;
-let advancedFailed = false;
 let processing = false;
 let segmentationEpoch = 0;
 let segmentationBusy = false;
-let segmentationJob;
 let segmentationTimer;
-let configuredModel;
-let segmentationImage;
 let matteSignature = '';
 let virtualBackground = null;
-function loadVirtualBackground(name){const image=new Image();image.dataset.name=name;if(name.startsWith('data:image/'))image.src=name;else{image.onerror=()=>{image.onerror=null;image.src=`assets/virtual-backgrounds/${name}.png`;};image.src=`assets/virtual-backgrounds/${name}.webp`;}virtualBackground=image;}
-let matteRefiner;
-let maskSurface, imageSurface, refinedSurface;
-function resetMatte() { segmentationEpoch++; matteRefiner?.reset(); }
+function loadVirtualBackground(name){const image=new Image();image.dataset.name=name;image.src=name.startsWith('data:image/')?name:`assets/virtual-backgrounds/${name}.webp`;virtualBackground=image;}
+
+// Matting modes, best first. A mode that cannot start (no WebGPU, no FP16, missing model)
+// falls back to the next one until the settings change.
+const MODE_FALLBACK = { rvm: 'quality', advanced: 'quality', quality: 'fast', fast: null };
+const MODE_NAMES = { rvm: '影片去背（RVM）', advanced: '進階去背（PP-MattingV2）', quality: '品質模式', fast: '快速模式' };
+const ALLOW_CPU_INFERENCE = window.MATTE_ALLOW_CPU === true; // automated tests only
+const engines = new Map();
+const failedModes = new Set();
+let compositor;
+let frameCanvas, frameContext;
+let fallbackNotice = '';
+let reportedMode = '';
+let lastErrorReason = '';
+const reportMatting = data => { try { window.desktop.reportMatting?.(data); } catch {} };
+function resetMatte() { segmentationEpoch++; compositor?.reset(); engines.forEach(engine => engine.reset()); }
 function stopSegmentation() { processing = false; clearTimeout(segmentationTimer); resetMatte(); }
+function requestedMode() { const mode = options.video?.matteQuality; return mode in MODE_FALLBACK ? mode : 'rvm'; }
+function activeMode() { let mode = requestedMode(); while (mode && failedModes.has(mode)) mode = MODE_FALLBACK[mode]; return mode; }
+function engineFor(mode) {
+  if (!engines.has(mode)) {
+    const { RVMMatting, PPMatting, TasksSegmenter } = window.Matting;
+    engines.set(mode, mode === 'rvm' ? new RVMMatting({ allowCpu: ALLOW_CPU_INFERENCE })
+      : mode === 'advanced' ? new PPMatting({ allowCpu: ALLOW_CPU_INFERENCE }) : new TasksSegmenter(mode));
+  }
+  return engines.get(mode);
+}
+// Only one model per window stays loaded, to keep GPU memory low.
+function releaseEngines(keep) { for (const [mode, engine] of engines) if (mode !== keep) { engines.delete(mode); engine.close().catch(() => {}); } }
 
 let retryTimer;
 let down;
@@ -90,7 +108,7 @@ function stopSource(){
 function applyOptions(next) {
   matteStatus.style.display='none';
   const signature = JSON.stringify([next.video?.background,next.video?.backgroundImage, next.video?.matteQuality, next.video?.matteEdge, next.video?.matteFeather, next.video?.matteStability]);
-  if (signature !== matteSignature) { resetMatte(); matteSignature = signature; advancedFailed = false; }
+  if (signature !== matteSignature) { resetMatte(); matteSignature = signature; failedModes.clear(); fallbackNotice = ''; reportedMode = ''; }
   options = next;
   const a=options.appearance||{}, v=options.video||{};
   decorationRenderer?.update(next.decoration, a.shape, overlayVisible);
@@ -100,7 +118,8 @@ function applyOptions(next) {
   shell.style.filter=a.shadow?'drop-shadow(0 5px 7px #0006)':'none';
   shell.style.inset=a.shadow?'14px':'2px';
   frame.style.background=['remove','virtual'].includes(v.background)?'transparent':'#111';
-  if(v.background==='virtual' && v.virtualType!=='solid' && (!virtualBackground || virtualBackground.dataset?.name!==(v.virtualType==='custom'?v.backgroundData:v.backgroundImage))){loadVirtualBackground(v.virtualType==='custom'?v.backgroundData:(v.virtualType==='solid'?'':v.backgroundImage));}
+  const backgroundName=v.virtualType==='custom'?v.backgroundData:v.backgroundImage;
+  if(v.background==='virtual'&&v.virtualType!=='solid'&&backgroundName&&virtualBackground?.dataset?.name!==backgroundName)loadVirtualBackground(backgroundName);
   video.style.transform=v.mirror?'scaleX(-1)':'none'; canvas.style.transform=v.mirror?'scaleX(-1)':'none';
   // Adjust the displayed image after segmentation to preserve mask alpha.
   const adjustment=(key,fallback,min,max)=>Number.isFinite(v[key])?Math.max(min,Math.min(max,v[key])):fallback;
@@ -113,78 +132,65 @@ function applyOptions(next) {
 function startSegmentation(){
   if(!stream||processing)return;
   processing=true;
-  if(!segmenter){
-    segmenter=new SelfieSegmentation({locateFile:f=>`vendor/selfie_segmentation/${f}`});
-    segmenter.onResults(result => {
-      if (segmentationJob?.epoch === segmentationEpoch && processing && stream && overlayVisible) drawResult(result);
-    });
-  }
   processFrame();
+}
+// One snapshot per inference so the matte, colour and blurred background share a frame.
+function captureFrame(){
+  const scale=Math.min(1,1280/Math.max(video.videoWidth,video.videoHeight));
+  const width=Math.max(1,Math.round(video.videoWidth*scale)),height=Math.max(1,Math.round(video.videoHeight*scale));
+  if(!frameCanvas){frameCanvas=document.createElement('canvas');frameContext=frameCanvas.getContext('2d');}
+  if(frameCanvas.width!==width||frameCanvas.height!==height){frameCanvas.width=width;frameCanvas.height=height;}
+  frameContext.drawImage(video,0,0,width,height);
+  return frameCanvas;
 }
 async function processFrame(){
   if(!processing||!stream||segmentationBusy)return;
   segmentationBusy=true;
-  const started=Date.now();
-  const epoch=segmentationEpoch;
+  const started=performance.now(),epoch=segmentationEpoch;
   let delay=33;
   try {
-    if(typeof video.readyState==='number' && video.readyState<2)return;
-    if(options.video?.matteQuality==='advanced' && !advancedFailed){
-      advancedSegmenter ||= new PPMatting();
-      try {
-        const result = await advancedSegmenter.send(video);
-        if(epoch===segmentationEpoch && processing && stream && overlayVisible) drawResult(result);
-        return;
-      } catch(error) {
-        if(epoch!==segmentationEpoch || !processing || !stream)return;
-        console.warn('PP-MattingV2 fallback: '+String(error));
-        advancedFailed=true;
-        await advancedSegmenter.close();advancedSegmenter=null;
+    if(video.readyState<2||!video.videoWidth)return;
+    const mode=activeMode();
+    if(!mode)throw new Error('No matting engine available');
+    releaseEngines(mode);
+    const engine=engineFor(mode),frame=captureFrame();
+    let result;
+    try { result=await engine.infer(frame); }
+    catch(error) {
+      if(epoch!==segmentationEpoch||!processing||!stream)return;
+      if(!MODE_FALLBACK[mode])throw error;
+      console.warn(`${mode} matting fallback: ${error?.message||error}`);
+      reportMatting({event:'fallback',mode,backend:engine.backend,reason:String(error?.message||error)});
+      failedModes.add(mode);engines.delete(mode);engine.close().catch(()=>{});
+      fallbackNotice=`${MODE_NAMES[requestedMode()]}無法使用，已改用${MODE_NAMES[activeMode()]||'原有背景'}。`;
+      delay=0;return;
+    }
+    try {
+      if(epoch===segmentationEpoch&&processing&&stream&&overlayVisible){
+        drawResult(result,mode,frame);
+        if(reportedMode!==mode){reportedMode=mode;reportMatting({event:'started',mode,backend:engine.backend,model:engine.model,compositor:compositor?.constructor.name,stats:engine.lastStats});}
       }
     }
-    if(advancedSegmenter){await advancedSegmenter.close();advancedSegmenter=null;}
-    const model=options.video?.matteQuality==='fast'?1:0;
-    if(configuredModel!==model){ await segmenter.setOptions({modelSelection:model,selfieMode:false}); configuredModel=model; }
-    if(epoch!==segmentationEpoch||!processing||!stream)return;
-    segmentationJob={epoch};
-    let image=video;
-    if(video.videoWidth){
-      const sourceScale=Math.min(1,1280/Math.max(video.videoWidth,video.videoHeight));
-      const sourceWidth=Math.max(1,Math.round(video.videoWidth*sourceScale));
-      const sourceHeight=Math.max(1,Math.round(video.videoHeight*sourceScale));
-      segmentationImage ||= document.createElement('canvas');
-      if(segmentationImage.width!==sourceWidth || segmentationImage.height!==sourceHeight){
-        segmentationImage.width=sourceWidth;segmentationImage.height=sourceHeight;
-      }
-      segmentationImage.getContext('2d').drawImage(video,0,0,sourceWidth,sourceHeight);
-      image=segmentationImage;
-    }
-    await segmenter.send({image});
-  } catch {
-    if(epoch===segmentationEpoch && processing){
+    finally { result.dispose?.(); }
+  } catch(error) {
+    if(epoch===segmentationEpoch&&processing){
+      console.warn('Matting failed: '+(error?.message||error));
+      const reason=String(error?.message||error);
+      if(reason!==lastErrorReason){lastErrorReason=reason;reportMatting({event:'error',mode:activeMode(),reason});}
       message.textContent='去背處理暫時失敗，正在重試；可切換「原有背景」。';message.style.display='grid';
       delay=1000;
     }
   } finally {
-    segmentationJob=null;segmentationBusy=false;
-    if(processing&&stream){clearTimeout(segmentationTimer);segmentationTimer=setTimeout(processFrame,Math.max(0,delay-(Date.now()-started)));}
+    segmentationBusy=false;
+    if(processing&&stream){clearTimeout(segmentationTimer);segmentationTimer=setTimeout(processFrame,Math.max(0,delay-(performance.now()-started)));}
   }
 }
-function refineMask(result) {
-  if(!matteRefiner){
-    matteRefiner=new MatteRefiner();
-    maskSurface=document.createElement('canvas');imageSurface=document.createElement('canvas');refinedSurface=document.createElement('canvas');
-  }
-  const scale=320/Math.max(video.videoWidth,video.videoHeight);
-  const width=Math.max(1,Math.round(video.videoWidth*scale)), height=Math.max(1,Math.round(video.videoHeight*scale));
-  for(const surface of [maskSurface,imageSurface,refinedSurface])if(surface.width!==width||surface.height!==height){surface.width=width;surface.height=height;}
-  const mc=maskSurface.getContext('2d',{willReadFrequently:true}),ic=imageSurface.getContext('2d',{willReadFrequently:true}),rc=refinedSurface.getContext('2d');
-  mc.clearRect(0,0,width,height);mc.drawImage(result.segmentationMask,0,0,width,height);
-  ic.drawImage(result.image,0,0,width,height);
-  const pixels=mc.getImageData(0,0,width,height), rgb=ic.getImageData(0,0,width,height);
-  const v=options.video||{};
-  pixels.data.set(matteRefiner.refine(pixels.data,rgb.data,width,height,{edge:v.matteEdge,feather:v.matteFeather,stability:v.matteStability}));
-  rc.putImageData(pixels,0,0);return refinedSurface;
+function matteSettings(mode){
+  const v=options.video||{},pct=(value,fallback)=>Number.isFinite(Number(value))?Math.max(0,Math.min(100,Number(value)))/100:fallback;
+  const edge=pct(v.matteEdge,.15),feather=pct(v.matteFeather,.25),stability=pct(v.matteStability,.4);
+  const segmentation=mode==='quality'||mode==='fast';
+  // Segmentation masks are re-thresholded; matting alpha only gets its faint haze trimmed.
+  return {segmentation,shrink:segmentation?edge*.16:edge*.3,soft:.24+feather*.5,history:stability*.8,edge:edge*100,feather:feather*100,stability:stability*100};
 }
 function outputCanvasSize(){
   const width=video.videoWidth,height=video.videoHeight;
@@ -193,28 +199,37 @@ function outputCanvasSize(){
   const scale=Math.min(1,1920/Math.max(width,height),(displayWidth*2)/width);
   return {width:Math.max(1,Math.round(width*scale)),height:Math.max(1,Math.round(height*scale))};
 }
-function drawResult(result){
+function renderForeground(source,result,mode){
+  compositor ||= MatteCompositor.create();
+  try { return compositor.render(source,result,matteSettings(mode)); }
+  catch(error) {
+    if(compositor instanceof MatteCompositor.CpuMatte)throw error;
+    console.warn('GPU matte failed, using CPU: '+error.message);
+    compositor.dispose();compositor=new MatteCompositor.CpuMatte();
+    return compositor.render(source,result,matteSettings(mode));
+  }
+}
+function drawResult(result,mode,source){
   if(!video.videoWidth)return;
   const outputSize=outputCanvasSize();
   if(canvas.width!==outputSize.width||canvas.height!==outputSize.height){canvas.width=outputSize.width;canvas.height=outputSize.height;}
-  const mode=options.video?.background;
-  const mask=result.advanced||options.video?.matteQuality==='fast'?result.segmentationMask:refineMask(result);
+  const foreground=renderForeground(source,result,mode);
+  const background=options.video?.background;
   context.save();context.clearRect(0,0,canvas.width,canvas.height);
-  // PP alpha was inferred from a square resize: restore, rather than crop, its aspect ratio.
-  if(result.advanced)context.drawImage(mask,0,0,canvas.width,canvas.height);else drawCover(mask);
-  context.globalCompositeOperation='source-in';drawCover(result.image);
-  if(mode==='blur'){
+  context.drawImage(foreground,0,0,canvas.width,canvas.height);
+  context.globalCompositeOperation='destination-over';
+  if(background==='blur'){
     const blurRadius=Math.max(1,(Number(options.video.blur)||14)*canvas.width/1280);
-    const bleed=Math.ceil(blurRadius*2);
-    context.globalCompositeOperation='destination-over';context.filter=`blur(${blurRadius}px)`;drawCover(result.image,bleed);context.filter='none';
-  } else if(mode==='virtual'){
-    context.globalCompositeOperation='destination-over';context.filter='none';if(options.video?.virtualType==='solid'){context.fillStyle=options.video.backgroundColor||'#7bb7e8';context.fillRect(0,0,canvas.width,canvas.height);}else if(virtualBackground?.complete && virtualBackground.naturalWidth>0)drawContain(virtualBackground);else{context.fillStyle='#9bc7e8';context.fillRect(0,0,canvas.width,canvas.height);}
+    context.filter=`blur(${blurRadius}px)`;drawCover(source,Math.ceil(blurRadius*2));context.filter='none';
+  } else if(background==='virtual'){
+    if(options.video?.virtualType==='solid'){context.fillStyle=options.video.backgroundColor||'#7bb7e8';context.fillRect(0,0,canvas.width,canvas.height);}
+    else if(virtualBackground?.complete&&virtualBackground.naturalWidth>0)drawContain(virtualBackground);
+    else{context.fillStyle='#9bc7e8';context.fillRect(0,0,canvas.width,canvas.height);}
   }
-  
   context.restore();
   message.style.display='none';
-  matteStatus.textContent='進階去背無法使用，已改用品質模式。';
-  matteStatus.style.display=advancedFailed?'block':'none';
+  matteStatus.textContent=fallbackNotice;
+  matteStatus.style.display=fallbackNotice?'block':'none';
 }
 function drawCover(image,extra=0){
   const iw=image.videoWidth||image.width, ih=image.videoHeight||image.height;
@@ -275,4 +290,3 @@ function drawContain(image){
   const scale=Math.min(canvas.width/iw,canvas.height/ih),w=iw*scale,h=ih*scale;
   context.drawImage(image,(canvas.width-w)/2,(canvas.height-h)/2,w,h);
 }
-

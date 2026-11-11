@@ -185,12 +185,12 @@ function updateMatteControls(){
   document.getElementById('sceneBackgroundRow').hidden=!active||type!=='scene';
   document.getElementById('solidBackgroundRow').hidden=!active||type!=='solid';
   document.getElementById('customBackgroundRow').hidden=!active||type!=='custom';
-  const disabled=original||document.getElementById('matteQuality').value!=='quality';
+  const disabled=original;
   ['matteEdge','matteFeather','matteStability'].forEach(id=>document.getElementById(id).disabled=disabled);
 }
 function fillOptions(s){
   const selected = appearanceTarget === 'all' ? s : (s.sourceOptions?.[Number(appearanceTarget)] || s);
-  const values={...imageDefaults,matteQuality:'quality',matteEdge:15,matteFeather:25,matteStability:40,...selected.appearance,...selected.video};
+  const values={...imageDefaults,matteQuality:'rvm',matteEdge:15,matteFeather:25,matteStability:40,...selected.appearance,...selected.video};
   controls.forEach(id=>{const e=document.getElementById(id);if(e.type==='checkbox')e.checked=!!values[id];else e.value=values[id]??e.value;});
   document.getElementById('borderWidthOut').value=`${values.borderWidth||0}px`;
   document.getElementById('radiusOut').value=`${values.radius||0}px`;
@@ -304,4 +304,3 @@ document.getElementById('openDiagnostics').onclick=()=>window.desktop.openDiagno
 
 document.getElementById('importBackground').onclick=()=>document.getElementById('backgroundFile').click();
 document.getElementById('backgroundFile').onchange=()=>{const file=document.getElementById('backgroundFile').files?.[0];if(!file)return;if(file.size>8*1024*1024){document.getElementById('customBackgroundName').textContent='圖片請小於 8 MB。';return;}const reader=new FileReader();reader.onload=()=>{document.getElementById('customBackgroundName').textContent=file.name;window.desktop.saveOptions({target:appearanceTarget,appearance:{},video:{backgroundData:reader.result,virtualType:'custom',background:'virtual'}});document.getElementById('background').value='virtual';document.getElementById('virtualType').value='custom';updateMatteControls();};reader.readAsDataURL(file);};
-

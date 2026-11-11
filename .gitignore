@@ -2,8 +2,9 @@ node_modules/
 .npm-cache/
 .electron-cache/
 .builder-cache/
-release/*
-!release/WebcamOverlay-Portable-*.exe
+release/
 Data/
 *.log
 experiments/
+src/vendor/mediapipe/selfie_multiclass_256x256.tflite
+src/.qa-overlay.html

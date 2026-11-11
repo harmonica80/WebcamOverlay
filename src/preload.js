@@ -1,6 +1,7 @@
 const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('desktop', {
   reportOverlayHealth: data => ipcRenderer.send('overlay-health', data),
+  reportMatting: data => ipcRenderer.send('overlay-matting', data),
   restartOverlays: () => ipcRenderer.invoke('restart-overlays'),
   openDiagnostics: () => ipcRenderer.invoke('open-diagnostics'),
   getState: () => ipcRenderer.invoke('get-state'),

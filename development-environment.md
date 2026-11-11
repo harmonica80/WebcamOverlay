@@ -17,7 +17,7 @@
 - JavaScript、HTML、CSS
 - Chromium renderer
 - Windows Media Capture：透過 `getUserMedia()` 取得攝影機
-- MediaPipe Selfie Segmentation：人物分割、背景模糊、人物去背
+- 去背模型：Robust Video Matting（ONNX Runtime Web + WebGPU）、PP-MattingV2（同上）、MediaPipe Tasks Vision Image Segmenter
 
 ## 專案結構
 
@@ -77,7 +77,8 @@ contextIsolation: true
 - `Tray`：Windows 系統匣
 - `nativeImage`：應用程式及系統匣圖示
 - `getUserMedia()`：攝影機擷取
-- MediaPipe Selfie Segmentation：人物分割
+- MediaPipe Tasks Vision：人物分割（品質／快速模式）
+- ONNX Runtime Web 1.24.3：RVM 與 PP-MattingV2 推論
 - Canvas：背景合成、模糊及透明去背
 - JSON：儲存使用者設定
 

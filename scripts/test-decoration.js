@@ -29,7 +29,9 @@ test('approved illustrated themes use bundled transparent artwork in both modes'
   const R=require('../src/decoration-scenes');
   for(const id of R.themes){
     const asset=fs.readFileSync(path.join(__dirname,'../src',R.assetPath(id)));
-    assert.equal(asset.readUInt32BE(16),1536);assert.equal(asset.readUInt32BE(20),1024);assert.equal(asset[25],6);
+    // WebP VP8X header: alpha flag and 24-bit (width-1, height-1).
+    assert.equal(asset.toString('ascii',0,4),'RIFF');assert.equal(asset.toString('ascii',12,16),'VP8X');assert.ok(asset[20]&0x10);
+    assert.equal(asset.readUIntLE(24,3)+1,1536);assert.equal(asset.readUIntLE(27,3)+1,1024);
     for(const mode of ['frame','sticker'])assert.ok(D.svg(id,mode).includes(R.assetPath(id)));
   }
   assert.ok(D.svg('newyear','frame').includes('rich-firework'));
@@ -58,7 +60,7 @@ test('reject invalid, truncated, oversized and excessive-animation inputs',()=>{
 test('save-decoration updates only its target and never overwrites camera settings',()=>{
   const source=fs.readFileSync(path.join(__dirname,'../src/main.js'),'utf8'),handlers={};let saves=0;
   const sender={},config={decorations:[{preset:'moon',size:40},{preset:'teacher',size:30}],sourceOptions:[{video:{brightness:80}},{video:{brightness:120}}]};
-  const c={ipcMain:{handle:(name,fn)=>handlers[name]=fn},settingsWindow:{webContents:sender},config,require:()=>D,saveConfig:()=>saves++,overlays:[],currentState:()=>config};sender.send=()=>{};vm.createContext(c);
+  const c={ipcMain:{handle:(name,fn)=>handlers[name]=fn},settingsWindow:{webContents:sender},config,require:()=>D,saveConfig:()=>saves++,overlays:[],sendToOverlays(){},currentState:()=>config};sender.send=()=>{};vm.createContext(c);
   vm.runInContext(source.slice(source.indexOf("ipcMain.handle('save-decoration'"),source.indexOf("ipcMain.handle('import-decoration'")),c);
   assert.equal(handlers['save-decoration']({sender:{}},{target:'all',patch:{enabled:true}}).ok,false);
   handlers['save-decoration']({sender},{target:'0',patch:{enabled:true}});

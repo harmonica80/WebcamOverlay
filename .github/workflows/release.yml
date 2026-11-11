@@ -1,0 +1,41 @@
+name: Release
+# Push a tag such as v0.3.2 to build the portable EXE on Windows and publish it.
+# The tag must match package.json; release notes come from release-notes-<tag>.md
+# (first line "# <title>", the rest is the release body).
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Run regression tests
+        run: npm test
+      - name: Build Windows portable EXE
+        run: npm run build:portable
+      - name: Publish GitHub release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          $version = $env:TAG.TrimStart('v')
+          $package = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          if ($package -ne $version) { throw "Tag $env:TAG does not match package.json version $package" }
+          $exe = "release/WebcamOverlay-Portable-$version.exe"
+          if (!(Test-Path $exe)) { throw "Missing $exe" }
+          $hash = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLower()
+          "$hash  WebcamOverlay-Portable-$version.exe" | Out-File -Encoding ascii release/SHA256SUMS.txt
+          $lines = Get-Content "release-notes-$env:TAG.md" -Encoding utf8
+          $title = $lines[0].TrimStart('#').Trim()
+          $lines | Select-Object -Skip 1 | Out-File -Encoding utf8 release/notes.md
+          gh release create $env:TAG $exe release/SHA256SUMS.txt --title $title --notes-file release/notes.md

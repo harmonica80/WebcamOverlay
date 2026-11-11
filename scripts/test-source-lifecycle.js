@@ -18,7 +18,7 @@ function setup() {
   const elements = {}, requests = [], timers = [], events = {}, models = [], advanced = [];
   const sandbox = {
     URLSearchParams, location: { search: '' }, addEventListener() {},
-    document: { getElementById: id => elements[id] ??= { style: {}, getContext: () => ({}), play: async () => {} } },
+    document: { getElementById: id => elements[id] ??= { style: {}, getContext: () => ({}), play: async () => {}, readyState: 4, videoWidth: 640, videoHeight: 360 } },
     navigator: { mediaDevices: { getUserMedia: constraints => {
       const request = { ...deferred(), id: constraints.video.deviceId.exact };
       requests.push(request); return request.promise;
@@ -32,49 +32,52 @@ function setup() {
     setTimeout: fn => { timers.push({ fn }); return timers.length - 1; },
     requestAnimationFrame() {},
     console: { warn() {} },
-    PPMatting: class {
-      constructor(){this.jobs=[];advanced.push(this);}
-      send(){const job=deferred();this.jobs.push(job);return job.promise;}
-      async close(){this.closed=true;}
-    },
-    SelfieSegmentation: class {
-      constructor(){this.jobs=[];this.selected=[];models.push(this);}
-      onResults(fn){this.result=fn;}
-      setOptions(opts){this.selected.push(opts.modelSelection);}
-      send(){const job=deferred();this.jobs.push(job);return job.promise;}
-    }
+    performance: { now: () => Date.now() },
+    MatteCompositor: { create: () => ({ reset() {}, render: () => ({}) }), CpuMatte: class {} },
   };
+  // Fake engines: every infer() call returns a promise the test resolves or rejects.
+  const engine = kind => class {
+    constructor(){this.kind=kind;this.jobs=[];this.resets=0;models.push(this);if(kind!=='tasks')advanced.push(this);}
+    infer(){const job=deferred();this.jobs.push(job);return job.promise;}
+    reset(){this.resets++;}
+    async close(){this.closed=true;}
+  };
+  sandbox.window.Matting = { RVMMatting: engine('rvm'), PPMatting: engine('pp'), TasksSegmenter: engine('tasks') };
+  sandbox.document.createElement = () => ({ width: 0, height: 0, getContext: () => ({ drawImage() {} }) });
   vm.runInNewContext(code, sandbox);
   const select = id => events.source({ deviceId: id, name: id });
   select('old'); events.visible(true);
   return { elements, requests, timers, events, select, models, advanced, sandbox };
 }
 
-test('advanced result cannot draw after source replacement', async () => {
+test('matting result cannot draw after source replacement', async () => {
   const h=setup();let draws=0;h.sandbox.capture=()=>draws++;
   vm.runInNewContext('drawResult = capture',h.sandbox);
   h.requests[0].resolve(camera());await flush();
-  h.events.options({video:{background:'remove',matteQuality:'advanced'}});await flush();
+  h.events.options({video:{background:'remove',matteQuality:'rvm'}});await flush();
   h.select('new');h.requests[1].resolve(camera());await flush();
-  h.advanced[0].jobs[0].resolve({advanced:true});await flush();
+  h.advanced[0].jobs[0].resolve({matting:true});await flush();
   assert.equal(draws,0);
   assert.equal(h.advanced.length,1);
   h.timers.filter(t=>!t.cancelled).at(-1).fn();await flush();
-  h.advanced[0].jobs[1].resolve({advanced:true});await flush();
+  h.advanced[0].jobs[1].resolve({matting:true});await flush();
   assert.equal(draws,1);
 });
 
-test('advanced failure falls back once and mode change permits retry', async () => {
+test('GPU engine failure falls back once and a settings change permits retry', async () => {
   const h=setup();h.requests[0].resolve(camera());await flush();
-  h.events.options({video:{background:'remove',matteQuality:'advanced'}});await flush();
+  h.events.options({video:{background:'remove',matteQuality:'rvm'}});await flush();
   h.advanced[0].jobs[0].reject(Error('GPU lost'));await flush();
   assert.equal(h.advanced[0].closed,true);
-  assert.equal(h.models[0].jobs.length,1);
-  assert.equal(vm.runInNewContext('advancedFailed',h.sandbox),true);
-  h.models[0].jobs[0].resolve();await flush();
-  h.events.options({video:{background:'original',matteQuality:'advanced'}});
-  h.events.options({video:{background:'remove',matteQuality:'advanced'}});await flush();
+  assert.equal(vm.runInNewContext('activeMode()',h.sandbox),'quality');
+  assert.match(vm.runInNewContext('fallbackNotice',h.sandbox),/品質模式/);
+  h.timers.filter(t=>!t.cancelled).at(-1).fn();await flush();
+  const quality=h.models.find(m=>m.kind==='tasks');assert.equal(quality.jobs.length,1);
+  quality.jobs[0].resolve({matting:false});await flush();
+  h.events.options({video:{background:'original',matteQuality:'rvm'}});
+  h.events.options({video:{background:'remove',matteQuality:'rvm'}});await flush();
   assert.equal(h.advanced.length,2);
+  assert.equal(quality.closed,true);
 });
 test('late failure from removed device cannot stop replacement or retry old device', async () => {
   const h = setup(); h.select('new'); const current = camera();
@@ -132,25 +135,27 @@ test('model changes wait for in-flight inference and discard its obsolete result
   const h=setup();h.requests[0].resolve(camera());await flush();
   vm.runInNewContext('drawResult = () => { globalThis.drawCount = (globalThis.drawCount || 0) + 1; };',h.sandbox);
   h.events.options({video:{background:'remove',matteQuality:'fast'}});await flush();
-  const model=h.models[0];assert.equal(model.jobs.length,1);
-  h.events.options({video:{background:'remove',matteQuality:'quality'}});
-  model.result({});assert.equal(h.sandbox.drawCount,undefined);
-  assert.equal(model.jobs.length,1);
-  model.jobs[0].resolve();await flush();h.timers.at(-1).fn();await flush();
-  assert.deepEqual(model.selected,[1,0]);model.result({});assert.equal(h.sandbox.drawCount,1);
-  h.events.visible(false);model.jobs[1].resolve();await flush();
+  const fast=h.models[0];assert.equal(fast.jobs.length,1);
+  h.events.options({video:{background:'remove',matteQuality:'quality'}});await flush();
+  assert.equal(h.models.length,1);
+  fast.jobs[0].resolve({});await flush();assert.equal(h.sandbox.drawCount,undefined);
+  h.timers.filter(t=>!t.cancelled).at(-1).fn();await flush();
+  assert.equal(fast.closed,true);
+  const quality=h.models[1];assert.equal(quality.jobs.length,1);
+  quality.jobs[0].resolve({});await flush();assert.equal(h.sandbox.drawCount,1);
+  h.events.visible(false);
 });
-test('hide/reopen during inference never starts concurrent model sends',async()=>{
+test('hide/reopen during inference never starts concurrent inference',async()=>{
   const h=setup();h.requests[0].resolve(camera());await flush();
   h.events.options({video:{background:'remove',matteQuality:'quality'}});await flush();
   const model=h.models[0];h.events.visible(false);h.events.visible(true);
   h.requests[1].resolve(camera());await flush();assert.equal(model.jobs.length,1);
-  model.jobs[0].resolve();await flush();h.timers.at(-1).fn();await flush();assert.equal(model.jobs.length,2);
-  h.events.visible(false);model.jobs[1].resolve();await flush();
+  model.jobs[0].resolve({});await flush();h.timers.filter(t=>!t.cancelled).at(-1).fn();await flush();assert.equal(model.jobs.length,2);
+  h.events.visible(false);model.jobs[1].resolve({});await flush();
 });
 test('original background recovers from segmentation failure without covering the video',async()=>{
   const h=setup();h.requests[0].resolve(camera());await flush();
-  h.events.options({video:{background:'remove',matteQuality:'quality'}});await flush();
+  h.events.options({video:{background:'remove',matteQuality:'fast'}});await flush();
   h.models[0].jobs[0].reject(Error('model failed'));await flush();
   assert.equal(h.elements.message.style.display,'grid');
   h.events.options({video:{background:'original'}});
