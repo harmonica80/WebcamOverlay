@@ -33,7 +33,7 @@
 | `scripts/verify-matting-electron.js` | 以合成攝影機實際執行所有去背模式與回退；`WEBCAM_QA_CPU=1` 允許 CPU 推論，`WEBCAM_QA_SOFTWARE_WEBGPU=1` 使用 SwiftShader 模擬 WebGPU |
 | `scripts/test-main-helpers.js` | 測試交換來源、原子寫檔、模型輸出檢查 |
 | `LICENSE`、`THIRD_PARTY_NOTICES.md`、`CHANGELOG.md` | GPL-3.0 全文、第三方授權與模型修改紀錄、版本紀錄（README 的舊版說明移到這裡） |
-| `.github/workflows/release.yml` | 推送 `v*` 標籤後在 Windows 建置 EXE，產生 SHA256SUMS.txt，並以 `release-notes-<標籤>.md` 建立 GitHub Release（標籤必須等於 package.json 版本） |
+| `.github/workflows/release.yml` | main 出現尚未發布的 package.json 版本（且有 `release-notes-v<版本>.md`）時，在 Windows 建置 EXE、產生 SHA256SUMS.txt，並建立標籤與 GitHub Release；也可推送 `v*` 標籤或手動執行 |
 | `release-notes-v0.3.2.md` | v0.3.2 發布說明（第一行為標題） |
 | `docs/matting-v0.3.0.md`、`docs/matting-v0.3.0-qa.png` | 去背流程說明與驗證結果圖 |
 | `src/assets/decorations/*-v041.webp` | 取代同名 PNG |
@@ -76,7 +76,7 @@ npx electron scripts/verify-matting-electron.js   # 實際執行所有去背模�
 npm.cmd run build:portable
 ```
 
-發布新版：更新 `package.json` 版本、新增 `release-notes-v<版本>.md`，合併到 main 後推送標籤 `v<版本>`，`release.yml` 會自動建置並發布。
+發布新版：更新 `package.json` 版本、新增 `release-notes-v<版本>.md`，合併到 main 後，`release.yml` 會自動建置並發布（已存在的版本會略過）。
 
 ## 五、已知限制與後續可做
 
