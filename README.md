@@ -2,84 +2,19 @@
 
 免安裝、可攜式的 Windows 雙攝影機浮動顯示工具。解壓縮後即可執行，不需要安裝驅動程式或背景服務。
 
-## v0.2.45 攝影機解析度與背景處理改善
+## v0.3.2 去背模型全面更新
 
-- 攝影機選單可選擇裝置支援的解析度；偵測時沿用單一攝影機串流逐項探測，縮短等待時間。
-- 修正背景模糊合成，並限制高解析度分割輸入與畫布尺寸，改善高解析度下模糊及虛擬背景顯示。
-- 五款內建背景以最多 800 像素寬的 WebP 照片封裝，保留純色與自訂圖片選項。
-
-[下載 v0.2.45 免安裝版（Windows EXE）](https://github.com/harmonica80/WebcamOverlay/releases/download/v0.2.45/WebcamOverlay-Portable-0.2.45.exe) · [版本說明與 SHA-256 校驗碼](https://github.com/harmonica80/WebcamOverlay/releases/tag/v0.2.45)
+[下載 v0.3.2 免安裝版（Windows EXE）](https://github.com/harmonica80/WebcamOverlay/releases/download/v0.3.2/WebcamOverlay-Portable-0.3.2.exe) · [版本說明與 SHA-256 校驗碼](https://github.com/harmonica80/WebcamOverlay/releases/tag/v0.3.2)
 
 關閉舊版後，將新版 EXE 放在原資料夾執行，並保留旁邊的 Data 資料夾。
 
-## v0.2.44 五款真實照片背景
+- **影片去背（RVM，預設）**：Robust Video Matting 專為網路攝影機設計，跨影格保留狀態，閃爍少、髮絲與手指完整，並以模型預測的前景色去除邊緣殘留的背景色。
+- **四種去背模式**：影片去背（RVM）、進階（PP-MattingV2）、品質（MediaPipe 多類別）、快速。需要 WebGPU 的模式無法使用時，自動改用品質模式並顯示提示。
+- **GPU 邊緣修整**：所有模式都以攝影機畫面為導引，在 GPU 上把遮罩放大到畫面解析度，並加上動作感知防閃爍。
+- **更小的程式**：PP-MattingV2 改用 FP16、裝飾圖改用 WebP、移除舊版 MediaPipe 與重複檔案。
+- **授權變更**：因包含 GPL-3.0 的 RVM，程式碼改以 GPL-3.0 釋出；詳見 [LICENSE](LICENSE) 與 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 
-虛擬背景的五個內建情境改為照片：明亮教室、溫馨書房、海景、櫻花庭園及柔和攝影棚。背景照片完整縮放顯示；原有純色與自訂圖片選項保留。
-
-[下載 v0.2.44 免安裝版（Windows EXE）](https://github.com/harmonica80/WebcamOverlay/releases/download/v0.2.44/WebcamOverlay-Portable-0.2.44.exe) · [版本說明與 SHA-256 校驗碼](https://github.com/harmonica80/WebcamOverlay/releases/tag/v0.2.44)
-
-關閉舊版後，將新版 EXE 放在原資料夾執行，並保留旁邊的 Data 資料夾。
-
-## v0.2.43 創用 CC 授權說明
-
-## v0.2.41 節慶裝飾與三款插畫場景
-
-- 10 款主題改為無框、不對稱、大小錯落的場景；櫻花向下飄落、氣球向上飄、蝙蝠橫飛，搭配雪花、愛心、彩紙及閃爍星光。
-- 新增「場景圖案大小」50–180% 與可選的細框線；框線預設關閉。
-- 「自由貼圖」大小擴充為 10–100%，內建與自訂 PNG／APNG 都能使用。
-- 保留靜態模式、兩台分別設定、自製圖檔教學及自行選擇的設定記錄。
-- 本機免安裝版：`release/WebcamOverlay-Portable-0.2.40.exe`。
-
-## v0.2.39 節慶外框與動態貼圖（本機版本）
-
-- 新增「節慶與活動裝飾」：10 款內建主題，每款可切換節慶外框／角落貼圖及靜態／動畫。
-- 可匯入透明 PNG／APNG；素材自動保存副本，支援不透明度、貼圖大小與九宮格位置。
-- 兩台可分別設定；同步調整只套用本次修改的裝飾項目。裝飾不受鏡像、亮度及去背影響。
-- 程式內提供可點開的「自製圖檔規格與教學」，包含畫布比例、透明背景、動畫與檔案限制。
-- 沿用自行選擇的設定記錄；未開啟記錄時，下次不會自動套用裝飾。
-- 本機免安裝版：`release/WebcamOverlay-Portable-0.2.39.exe`；尚未公開上傳。
-
-[自製圖檔與操作說明](docs/decoration-guide.md)
-
-## v0.2.38 攝影機畫面恢復（本機測試版）
-
-新增「重新啟動攝影機畫面」及「開啟診斷紀錄」。繪圖程序崩潰、視窗意外關閉或長時間無回應時，自動重建攝影機視窗並沿用設定與位置。短時間連續異常會延後重試，避免無限快速重啟。手動重啟仍保留目前顯示／隱藏模式。
-
-診斷檔位於設定檔旁的 `Data/diagnostics.log`；約 1 MB 輪替為 `.log.1`，不記錄攝影機影像或裝置名稱。若畫面再次消失，請保留這兩個紀錄檔。此版補足恢復機制；尚未確認長時間使用消失的原始原因。
-
-## v0.2.37 攝影機影像調整
-
-新增亮度、對比、飽和度、色相與重設影像調整按鈕，位於「顯示陰影」下方；可同步套用或各攝影機獨立調整，勾選記錄設定後可於下次啟動還原。
-
-[下載 v0.2.37 免安裝版](https://github.com/harmonica80/WebcamOverlay/releases/download/v0.2.37/WebcamOverlay-Portable-0.2.37.exe)
-
-## v0.2.36 攝影機影像調整（本機版本）
-
-「畫面與背景」新增亮度、對比、飽和度（0–200%，100% 為原始值）及色相（−180° 至 180°），可同步或分別套用。重設影像調整只還原這四項；勾選「記住設定」後會保留到下次啟動。調整適用於原有背景、背景模糊與人物去背，不改變去背模型輸入。
-
-## v0.2.35 設定記錄改為自行選擇
-
-- 預設不記錄上次設定；舊版設定檔未明確開啟記錄時，也會使用預設值。
-- 視窗下方可勾選「記錄設定，下次啟動時自動套用」，立即保存目前設定，後續變更自動保存。
-- 取消勾選保留當次操作，清除已記錄的設定，下次啟動恢復預設值。
-- 「重設為預設值」會重設目前設定並關閉記錄。
-- 包含本機 v0.2.34 的 PP-MattingV2 品質模式與 ONNX 執行環境；更新下載改用 GitHub Release。
-
-[下載 v0.2.35 免安裝版](https://github.com/harmonica80/WebcamOverlay/releases/download/v0.2.35/WebcamOverlay-Portable-0.2.35.exe)
-
-## v0.2.33 第一階段去背改善（歷史版本）
-
-- 「畫面與背景」新增品質／快速模式。品質模式採用通用人物分割模型，加入原始影像引導的邊緣處理與動作感知防閃爍；快速模式保留原有模型與直接遮罩合成。
-- 品質模式可調整輪廓收縮、邊緣柔和與防閃爍，支援每台攝影機分別保存。初始值為 15%、25%、40%。
-- 切換來源、模式或隱藏畫面會清除歷史遮罩；模型推論依序執行，過期結果不會覆蓋目前畫面。
-- 本機檔案：`release/WebcamOverlay-Portable-0.2.33.exe`。保留 EXE 旁的 `Data` 資料夾即可沿用設定。
-- 14 項回歸測試通過。另以 Electron 執行同一公開人物照片的移動畫面，確認兩模型、合成及切換可運作；不代表真實髮絲、雙攝影機或不同硬體的效果保證。
-
-## v0.2.32 歷史版本
-
-v0.2.32 修正更換攝影機後，舊連線與自動重試干擾新來源的問題。保留既有設定；連線時隱藏視窗會釋放延遲取得的串流，使用中的攝影機中斷時會重新連線。六項受控測試通過，實體攝影機拔插與 Windows 視窗顯示仍需實機驗證。
-
-[下載 WebcamOverlay 0.2.32 免安裝版（EXE）](https://github.com/harmonica80/WebcamOverlay/releases/download/v0.2.32/WebcamOverlay-Portable-0.2.32.exe)
+舊版本說明請見 [CHANGELOG.md](CHANGELOG.md)。
 
 ## 功能總覽
 
@@ -122,7 +57,10 @@ v0.2.32 修正更換攝影機後，舊連線與自動重試干擾新來源的問
 - 原有背景。
 - 背景模糊，可調整模糊程度。
 - 人物去背，背景以透明方式顯示，可看見後方視窗。
-- 背景模糊與去背使用隨程式封裝的離線人物分割模型，不需要網路。
+- 虛擬背景：內建照片、純色或自訂圖片。
+- 去背模式：影片去背（RVM）、進階（PP-MattingV2）、品質（MediaPipe 多類別）、快速。
+- 所有模型隨程式封裝、離線執行，攝影機影像不會離開電腦。
+- RVM 與進階模式需要支援 WebGPU 與 FP16 的顯示卡（近年 NVIDIA、AMD、Intel 內顯多可支援）。
 
 ### 快速鍵
 
@@ -158,12 +96,23 @@ v0.2.32 修正更換攝影機後，舊連線與自動重試干擾新來源的問
 ## 開發與建置
 
 ```powershell
-npm.cmd install
+npm.cmd install            # 也會複製執行檔案並下載品質模式模型
 npm.cmd start
-npm.cmd run build:portable
+npm.cmd test               # 回歸測試
+npm.cmd run build:portable # 產生 release\WebcamOverlay-Portable-<版本>.exe
 ```
 
-攝影機連線生命週期回歸測試：`node --test scripts/test-source-lifecycle.js`。此為受控非同步測試；實體裝置拔插與 Windows 浮動視窗顯示仍需實機驗證。
+- `scripts/sync-vendor.js`：從 node_modules 複製 ONNX Runtime 與 MediaPipe Tasks 執行檔到 `src/vendor`。
+- `scripts/fetch-models.js`：下載 selfie multiclass 模型（Google 官方網址）並核對 SHA-256；建置時必須成功，`npm install` 時失敗只會提示。
+- `npx electron scripts/verify-matting-electron.js`：以合成攝影機實際執行所有去背模式，輸出到 `release/matte-qa`。沒有 GPU 的環境可加上環境變數 `WEBCAM_QA_CPU=1`。
 
-建置產物會放在 `release` 資料夾。專案原始碼位於 [GitHub WebcamOverlay](https://github.com/harmonica80/WebcamOverlay)。
+模型來源與轉換：
 
+| 檔案 | 來源 | 處理 |
+|---|---|---|
+| `vendor/rvm/rvm_mobilenetv3_webgpu.onnx` | RobustVideoMatting v1.0.0 官方 FP32 ONNX | 以 `scripts/patch-rvm-model.py` 將通道數補齊為 4 的倍數，避開 ONNX Runtime WebGPU 卷積錯誤；結果與原模型相同 |
+| `vendor/ppmatting/ppmattingv2_fp16.onnx` | v0.2.34 修正後的 PP-MattingV2 ONNX | 移除 Resize 空輸入後轉 FP16（輸入輸出維持 FP32），與 FP32 最大透明度差 0.03 |
+| `vendor/mediapipe/selfie_segmentation*.tflite` | 原本隨程式附帶的 MediaPipe 模型 | 以 tflite-support 加入 Tasks API 需要的正規化 metadata（mean 0、std 255） |
+| `vendor/mediapipe/selfie_multiclass_256x256.tflite` | Google MediaPipe 官方 | 由 `fetch-models.js` 下載 |
+
+專案原始碼位於 [GitHub WebcamOverlay](https://github.com/harmonica80/WebcamOverlay)。

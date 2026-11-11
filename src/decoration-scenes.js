@@ -4,7 +4,7 @@
  */
 (function(root) {
   const themes = ['newyear', 'moon', 'graduation'];
-  const assetPath = id => `assets/decorations/${id}-v041.png`;
+  const assetPath = id => `assets/decorations/${id}-v041.webp`;
   function render(id, mode, shape, options = {}) {
     if (!themes.includes(id)) return null;
     const h = mode === 'sticker' ? 180 : shape === 'circle' ? 640 : 360;
