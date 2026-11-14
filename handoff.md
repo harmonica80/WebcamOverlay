@@ -54,6 +54,7 @@
 | `scripts/test-settings-persistence.js` | mock 加入 `renameSync` |
 | `.github/workflows/checks.yml` | 測試改用 `npm test`；artifact 名稱不再寫死版本 |
 | `.gitignore` | `release/` 整個忽略；忽略 multiclass 模型與 QA 暫存檔 |
+| `release/*.exe`（0.2.11–0.2.27） | 從版本控制移除（2026-11-14），避免每次下載專案都多 408 MB；檔案仍保留在 git 歷史中，新版請使用 GitHub Releases |
 | `README.md`、`development-environment.md` | 新版說明、建置步驟、模型來源表 |
 
 ### 刪除檔案
